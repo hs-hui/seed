@@ -11,7 +11,7 @@ import { branchSuggestions, createBranch, pruneItem, pruneSuggestions } from '..
 import { calculateMaturity, clearItems, uncertainItems, exploreItems, statusForMaturity } from '../core/maturity.js';
 import { dimensionsFor } from '../ai/provider.js';
 import { providerKey } from '../ai/provider.js';
-import { loginOpenAI } from '../ai/openai-oauth.js';
+import { loginOpenAI, getOpenAIToken } from '../ai/openai-oauth.js';
 import { harvest, harvestTitle } from '../core/harvest.js';
 
 type CommonOptions = { lang?: string; json?: boolean; provider?: string; model?: string; branch?: string; setup?: boolean };
@@ -67,7 +67,7 @@ async function plantCommand(idea: string | undefined, options: CommonOptions): P
   }
   if (!idea) throw new Error('An idea is required.');
   const seed = await plant(store, idea);
-  const question = await askGrowthQuestion(store, seed, options.provider, undefined, options.model);
+  const question = await askGrowthQuestion(store, seed, options.provider, undefined, options.model, currentLanguage());
   if (options.json) { print({ ...(await store.load()), firstQuestion: question }, true); } else {
     console.log(`${t('plant.created')}\n${t('plant.growNext')}`);
     console.log(`\n${question}`);
@@ -95,7 +95,7 @@ grow.action(async (options: CommonOptions & { answer?: string; interactive?: boo
   const branchId = options.branch ?? seed.activeBranch;
   let answer = options.answer;
   if (!answer) {
-    const question = await askGrowthQuestion(store, seed, options.provider, branchId, options.model);
+    const question = await askGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage());
     if (options.interactive === false || !process.stdin.isTTY) { print({ question }, Boolean(options.json)); return; }
     answer = await input({ message: question });
   }
@@ -111,13 +111,13 @@ branch.action(async (selection: string | undefined, options: CommonOptions) => r
   const store = await openStore(); const seed = await currentSeed(store); const branches = await store.branches(seed.id);
   if (selection === 'list') { if (!branches.length) print(t('branch.listEmpty')); else print(options.json ? branches : branches.map((b) => `${b.status === 'active' ? '🌿' : '✂️'} ${b.name} (${b.maturity}%)`).join('\n'), Boolean(options.json)); return; }
   if (selection) {
-    const suggestions = await branchSuggestions(seed, options.provider, options.model); const index = Number(selection) - 1;
+    const suggestions = await branchSuggestions(seed, options.provider, options.model, currentLanguage()); const index = Number(selection) - 1;
     const selected = Number.isInteger(index) && index >= 0 ? suggestions[index] : suggestions.find((s) => s.name.toLowerCase() === selection.toLowerCase());
     if (!selected) throw new Error('Branch selection not found.');
     const created = await createBranch(store, seed, selected.name, selected.summary, options.provider);
     print(options.json ? created : t('branch.created', { name: created.name }), Boolean(options.json)); return;
   }
-  const suggestions = await branchSuggestions(seed, options.provider, options.model);
+  const suggestions = await branchSuggestions(seed, options.provider, options.model, currentLanguage());
   if (options.json || !process.stdin.isTTY) { print({ suggestions }, Boolean(options.json)); return; }
   console.log(t('branch.title'));
   const selected = await select({ message: t('branch.select', { count: suggestions.length }), choices: suggestions.map((s, i) => ({ name: `${i + 1}. ${s.name} — ${s.summary}`, value: i })) });
@@ -127,7 +127,7 @@ branch.action(async (selection: string | undefined, options: CommonOptions) => r
 
 const prune = addCommon(program.command('prune').description(t('help.prune'))).argument('[item]', 'Item or branch to prune');
 prune.action(async (item: string | undefined, options: CommonOptions) => run(async () => {
-  const store = await openStore(); const seed = await currentSeed(store); const suggestions = await pruneSuggestions(seed, options.provider, options.model);
+  const store = await openStore(); const seed = await currentSeed(store); const suggestions = await pruneSuggestions(seed, options.provider, options.model, currentLanguage());
   item ??= options.branch;
   if (!item) {
     if (options.json || !process.stdin.isTTY) { print({ suggestions }, Boolean(options.json)); return; }
@@ -179,24 +179,53 @@ async function configWizard(): Promise<void> {
   current.lang = currentLanguage();
   current.setupCompleted = true;
   const selected = await select({ message: t('config.chooseProvider'), choices: [
-    { name: 'Local fallback — no API key', value: 'local' },
-    { name: 'OpenAI — API key', value: 'openai' },
-    { name: 'Google Gemini — API key', value: 'gemini' },
-    { name: 'Anthropic Claude — API key', value: 'anthropic' },
-    { name: 'Custom OpenAI-compatible provider', value: 'custom' },
+    { name: t('config.provider.local'), value: 'local' },
+    { name: t('config.provider.openaiKey'), value: 'openai' },
+    { name: t('config.provider.openaiAccount'), value: 'openai-oauth' },
+    { name: t('config.provider.gemini'), value: 'gemini' },
+    { name: t('config.provider.anthropic'), value: 'anthropic' },
+    { name: t('config.provider.custom'), value: 'custom' },
   ] });
   if (selected === 'local') { current.activeProvider = 'local'; await saveConfig(current); console.log(t('config.saved')); return; }
+  if (selected === 'openai-oauth') {
+    console.log(t('config.oauthExperimental'));
+    try {
+      await loginOpenAI();
+      const existing = current.providers.find((provider) => provider.id === 'openai');
+      current.providers = [...current.providers.filter((entry) => entry.id !== 'openai'), {
+        ...(existing ?? { id: 'openai', name: 'openai', type: 'openai' as const, defaultModel: 'gpt-4o-mini', enabled: true }),
+        connectionMode: 'oauth' as const,
+      }];
+      current.activeProvider = 'openai';
+      await saveConfig(current);
+      console.log(t('config.saved'));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(t('config.oauthFailed', { message }));
+      current.activeProvider = 'local';
+      await saveConfig(current);
+    }
+    return;
+  }
   const id = selected === 'custom' ? (await input({ message: t('config.providerId'), default: 'custom-1' })).trim() : selected;
   const baseUrl = selected === 'custom' ? (await input({ message: t('config.baseUrl') })).trim() : undefined;
   const modelDefaults: Record<string, string> = { openai: 'gpt-4o-mini', gemini: 'gemini-2.5-flash', anthropic: 'claude-3-5-sonnet-latest' };
   const defaultModel = await input({ message: t('config.model'), default: modelDefaults[selected] ?? 'default' });
   const existing = current.providers.find((provider) => provider.id === id);
-  const provider = { id, name: id, type: (selected === 'custom' ? 'custom' : selected) as 'openai' | 'gemini' | 'anthropic' | 'custom', defaultModel, enabled: true, ...(baseUrl ? { baseUrl } : {}), ...(existing?.connectionMode ? { connectionMode: existing.connectionMode } : {}) };
-  const key = selected === 'openai' ? (process.env.SEED_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY) : selected === 'gemini' ? process.env.SEED_GEMINI_API_KEY : selected === 'anthropic' ? (process.env.SEED_ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY) : process.env.SEED_API_KEY;
-  if (!key) { await saveConfig(current); console.log(t('config.emptyKey')); return; }
+  const provider = { id, name: id, type: (selected === 'custom' ? 'custom' : selected) as 'openai' | 'gemini' | 'anthropic' | 'custom', defaultModel, enabled: true, ...(baseUrl ? { baseUrl } : {}), connectionMode: 'api-key' as const };
+  const key = selected === 'openai' ? (process.env.SEED_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY) : selected === 'gemini' ? (process.env.SEED_GEMINI_API_KEY ?? process.env.GEMINI_API_KEY) : selected === 'anthropic' ? (process.env.SEED_ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY) : process.env.SEED_API_KEY;
+  if (!key) {
+    // Keep the selected provider/model so adding the key later only needs
+    // `seed config set provider <id>`; do not make it active before it works.
+    current.providers = [...current.providers.filter((entry) => entry.id !== id), { ...provider, enabled: false }];
+    current.activeProvider = 'local';
+    await saveConfig(current);
+    console.log(t('config.emptyKey'));
+    return;
+  }
   current.providers = [...current.providers.filter((entry) => entry.id !== id), provider]; current.activeProvider = id; await saveConfig(current); console.log(t('config.saved'));
 }
-config.action(async (options: CommonOptions) => run(async () => { if (process.stdin.isTTY) await configWizard(); else { const value = await loadConfig(); console.log(JSON.stringify({ ...value, envKeys: ['OPENAI_API_KEY', 'SEED_GEMINI_API_KEY', 'SEED_ANTHROPIC_API_KEY', 'SEED_API_KEY'] }, null, 2)); } }, options));
+config.action(async (options: CommonOptions) => run(async () => { if (process.stdin.isTTY) await configWizard(); else { const value = await loadConfig(); console.log(JSON.stringify({ ...value, envKeys: ['OPENAI_API_KEY', 'SEED_GEMINI_API_KEY', 'GEMINI_API_KEY', 'SEED_ANTHROPIC_API_KEY', 'SEED_API_KEY'] }, null, 2)); } }, options));
 config.command('list').description('List providers').action(async () => run(async () => { const value = await loadConfig(); console.log(JSON.stringify(value, null, 2)); }));
 config.command('use').argument('<provider>').description('Select active provider').action(async (provider: string) => run(async () => { const value = await loadConfig(); if (!value.providers.some((p) => p.id === provider)) throw new Error(t('error.invalidProvider', { provider })); value.activeProvider = provider; await saveConfig(value); console.log(t('config.active', { provider })); }));
 config.command('set').argument('<key>').argument('<value>').description('Set provider or language').action(async (key: string, valueArg: string) => run(async () => {
@@ -208,7 +237,9 @@ config.command('set').argument('<key>').argument('<value>').description('Set pro
       value.providers.push({ id: valueArg, name: valueArg, type: known.type, defaultModel: known.model, enabled: true, ...(known.type === 'openai' ? { connectionMode: 'api-key' as const } : {}) });
     }
     const configured = value.providers.find((provider) => provider.id === valueArg);
-    if (configured && configured.id !== 'local' && !providerKey(configured)) { console.log(t('config.emptyKey')); return; }
+    const credential = configured && (providerKey(configured) ?? (configured.type === 'openai' && configured.connectionMode === 'oauth' ? await getOpenAIToken() : undefined));
+    if (configured && configured.id !== 'local' && !credential) { console.log(t('config.emptyKey')); return; }
+    if (configured) configured.enabled = true;
     value.activeProvider = valueArg; await saveConfig(value); console.log(t('config.saved')); return;
   }
   if (key === 'model') { const active = value.providers.find((p) => p.id === value.activeProvider); if (!active) throw new Error(t('error.invalidProvider', { provider: value.activeProvider })); active.defaultModel = valueArg; await saveConfig(value); console.log(t('config.saved')); return; }
@@ -224,7 +255,7 @@ config.command('unset').argument('<key>').description('Remove a setting').action
 config.command('test').description('Check the active provider').action(async () => run(async () => {
   const value = await loadConfig(); const active = value.providers.find((p) => p.id === value.activeProvider);
   if (!active || active.id === 'local') { console.log(t('config.localReady')); return; }
-  const key = providerKey(active) ?? (active.type === 'openai' && active.connectionMode === 'oauth' ? (await import('../ai/openai-oauth.js')).loadOpenAITokens().then((tokens) => tokens?.access_token) : undefined);
+  const key = providerKey(active) ?? (active.type === 'openai' && active.connectionMode === 'oauth' ? await getOpenAIToken() : undefined);
   if (!key) { console.log(t('config.emptyKey')); process.exitCode = 1; return; }
   console.log(t('config.keyConfigured', { provider: active.id }));
 }));

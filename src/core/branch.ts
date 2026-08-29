@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { SeedStore } from '../storage/store.js';
 import { addEvent } from './seed-manager.js';
 import { suggestBranches, suggestPrune } from '../ai/provider.js';
+import type { ProviderLanguage } from '../ai/provider.js';
 
 export async function createBranch(store: SeedStore, seed: SeedState, name: string, summary: string, providerId?: string): Promise<Branch> {
   const active = (await store.branches(seed.id)).filter((b) => b.status === 'active');
@@ -12,8 +13,8 @@ export async function createBranch(store: SeedStore, seed: SeedState, name: stri
   await store.saveBranch(branch); const updated = { ...seed, branches: [...seed.branches, branch.id], activeBranch: branch.id, status: 'branching' as const, updatedAt: now() };
   await store.save(updated); await addEvent(store, updated, 'branch', `Branch created: ${name}`, { branchId: branch.id }); return branch;
 }
-export async function branchSuggestions(seed: SeedState, providerId?: string, model?: string): Promise<Array<{ name: string; summary: string }>> { return suggestBranches(seed, providerId, model); }
-export async function pruneSuggestions(seed: SeedState, providerId?: string, model?: string): Promise<Array<{ item: string; reason: string }>> { return suggestPrune(seed, providerId, model); }
+export async function branchSuggestions(seed: SeedState, providerId?: string, model?: string, language: ProviderLanguage = 'en'): Promise<Array<{ name: string; summary: string }>> { return suggestBranches(seed, providerId, model, language); }
+export async function pruneSuggestions(seed: SeedState, providerId?: string, model?: string, language: ProviderLanguage = 'en'): Promise<Array<{ item: string; reason: string }>> { return suggestPrune(seed, providerId, model, language); }
 export async function pruneItem(store: SeedStore, seed: SeedState, item: string): Promise<SeedState> {
   const branches = await store.branches(seed.id); const target = branches.find((b) => b.name.toLowerCase() === item.toLowerCase() || b.id === item);
   if (target) { await store.saveBranch({ ...target, status: 'pruned', updatedAt: now() }); }

@@ -49,7 +49,34 @@ npx --yes --package @seed-cli/seed seed
 
 Bare `npx seed` only resolves this CLI when `@seed-cli/seed` is already installed locally (or linked); otherwise npm resolves the unrelated unscoped `seed` package.
 
-The CLI defaults to English. Use `--lang ko` or `SEED_LANG=ko` for Korean UI. Configure an API key first (for example `OPENAI_API_KEY=...`) and then run `seed config set provider openai`, or keep using the local fallback while exploring the workflow.
+The CLI defaults to English. Use `--lang ko` or `SEED_LANG=ko` for Korean UI. The first interactive run asks for both language and provider; `seed --setup` opens that wizard again. AI responses follow the selected language, including the local fallback.
+
+## AI providers
+
+API keys are read from environment variables and are never written to `.seed/` or the config file:
+
+```bash
+# OpenAI (official API-key flow)
+OPENAI_API_KEY=sk-...
+seed config set provider openai
+
+# Gemini or Claude
+SEED_GEMINI_API_KEY=...
+seed config set provider gemini
+SEED_ANTHROPIC_API_KEY=...
+seed config set provider anthropic
+```
+
+Run `seed config test` to check that the active provider has a usable credential. If a key is missing or a request fails, Seed keeps the deterministic local fallback available so the idea is not lost.
+
+OpenAI account login is also exposed for the PRD flow:
+
+```bash
+SEED_OPENAI_CLIENT_ID=...
+seed config login openai
+```
+
+This Device Flow is marked experimental and requires a client id issued for the application. The supported, documented OpenAI API path is an API key; a ChatGPT subscription does not automatically include API usage or billing. After login, the access token is stored under the user Seed directory with restrictive file permissions and refreshed when a refresh token is available.
 
 ## MVP commands
 

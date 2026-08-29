@@ -3,10 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { SeedStore } from '../storage/store.js';
 import { addConversation, addEvent } from './seed-manager.js';
 import { nextQuestion, dimensionsFor } from '../ai/provider.js';
+import type { ProviderLanguage } from '../ai/provider.js';
 import { calculateMaturity, statusForMaturity } from './maturity.js';
 
-export async function askGrowthQuestion(store: SeedStore, seed: SeedState, providerId?: string, branchId?: string, model?: string): Promise<string> {
-  const suggestion = await nextQuestion(seed, providerId, model);
+export async function askGrowthQuestion(store: SeedStore, seed: SeedState, providerId?: string, branchId?: string, model?: string, language: ProviderLanguage = 'en'): Promise<string> {
+  const suggestion = await nextQuestion(seed, providerId, model, language);
   await addConversation(store, { seedId: seed.id, ...(branchId ? { branchId } : {}), role: 'assistant', type: 'question', content: suggestion.question });
   const existing = seed.openQuestions.find((question) => question.status === 'open' && question.question === suggestion.question && question.branchId === branchId);
   if (!existing) {
@@ -25,9 +26,12 @@ export async function applyGrowth(store: SeedStore, seed: SeedState, answer: str
   const asked = [...conversations].reverse().find((entry) => entry.role === 'assistant' && entry.type === 'question' && entry.branchId === branchId);
   const openQuestions = seed.openQuestions.map((question) => question.question === asked?.content && question.status === 'open'
     ? { ...question, status: 'answered' as const, answer: trimmed, answeredAt: now() } : question);
-  const users = asked?.content.toLowerCase().includes('who') && !seed.users.includes(trimmed) ? [...seed.users, trimmed.slice(0, 120)] : seed.users;
-  const problem = asked?.content.toLowerCase().includes('problem') && !seed.problem ? trimmed : seed.problem;
-  const goals = !asked?.content.toLowerCase().includes('who') && !asked?.content.toLowerCase().includes('problem') && !seed.goals.includes(trimmed)
+  const askedText = asked?.content.toLowerCase() ?? '';
+  const asksUser = askedText.includes('who') || /누구|사람|사용자/.test(askedText);
+  const asksProblem = askedText.includes('problem') || /문제|어려|고통|힘든/.test(askedText);
+  const users = asksUser && !seed.users.includes(trimmed) ? [...seed.users, trimmed.slice(0, 120)] : seed.users;
+  const problem = asksProblem && !seed.problem ? trimmed : seed.problem;
+  const goals = !asksUser && !asksProblem && !seed.goals.includes(trimmed)
     ? [...seed.goals, trimmed.slice(0, 160)] : seed.goals;
   const maturityDelta = Math.max(1, Math.min(8, Math.ceil(trimmed.length / 50)));
   const updated: SeedState = { ...seed, coreIdea: after, problem, users, goals,
