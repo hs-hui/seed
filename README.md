@@ -31,7 +31,13 @@ npm exec --package . -- seed --help
 npx --yes --package github:hs-hui/seed#feat/seed-mvp-bootstrap seed --help
 ```
 
-After publishing the scoped package, the public command will be `npx @seed-cli/seed` (or `npm i -g @seed-cli/seed` followed by `seed`).
+After publishing the scoped package, use either `npx @seed-cli/seed` or the explicit binary form:
+
+```bash
+npx --yes --package @seed-cli/seed seed
+```
+
+Bare `npx seed` only resolves this CLI when `@seed-cli/seed` is already installed locally (or linked); otherwise npm resolves the unrelated unscoped `seed` package.
 
 Use `--lang ko` or `SEED_LANG=ko` for Korean UI. Configure an API key with `seed config set provider openai` and `OPENAI_API_KEY`, or keep using the local fallback while exploring the workflow.
 
