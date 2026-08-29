@@ -27,8 +27,8 @@ The package is not published under the unscoped `seed` name (that name belongs t
 
 ```bash
 npm exec --package . -- seed --help
-# or, directly from GitHub after cloning:
-npx --yes --package github:hs-hui/seed seed --help
+# or, directly from the current GitHub branch:
+npx --yes --package github:hs-hui/seed#feat/seed-mvp-bootstrap seed --help
 ```
 
 After publishing the scoped package, the public command will be `npx @seed-cli/seed` (or `npm i -g @seed-cli/seed` followed by `seed`).
