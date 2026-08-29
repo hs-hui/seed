@@ -27,15 +27,21 @@ export async function applyGrowth(store: SeedStore, seed: SeedState, answer: str
   const openQuestions = seed.openQuestions.map((question) => question.question === asked?.content && question.status === 'open'
     ? { ...question, status: 'answered' as const, answer: trimmed, answeredAt: now() } : question);
   const askedText = asked?.content.toLowerCase() ?? '';
-  const asksUser = askedText.includes('who') || /누구|사람|사용자/.test(askedText);
+  // "사용자" appears in many outcome questions, so only classify a
+  // response as a user definition when the question asks who/which person.
+  const asksUser = askedText.includes('who') || /누구|누가|사람|대상/.test(askedText);
   const asksProblem = askedText.includes('problem') || /문제|어려|고통|힘든/.test(askedText);
+  const asksConstraint = askedText.includes('constraint') || /제약|범위|제한|줄여/.test(askedText);
+  const asksAssumption = askedText.includes('assumption') || /가정|전제|검증/.test(askedText);
   const users = asksUser && !seed.users.includes(trimmed) ? [...seed.users, trimmed.slice(0, 120)] : seed.users;
   const problem = asksProblem && !seed.problem ? trimmed : seed.problem;
-  const goals = !asksUser && !asksProblem && !seed.goals.includes(trimmed)
+  const constraints = asksConstraint && !seed.constraints.includes(trimmed) ? [...seed.constraints, trimmed.slice(0, 160)] : seed.constraints;
+  const assumptions = asksAssumption && !seed.assumptions.includes(trimmed) ? [...seed.assumptions, trimmed.slice(0, 160)] : seed.assumptions;
+  const goals = !asksUser && !asksProblem && !asksConstraint && !asksAssumption && !seed.goals.includes(trimmed)
     ? [...seed.goals, trimmed.slice(0, 160)] : seed.goals;
   const maturityDelta = Math.max(1, Math.min(8, Math.ceil(trimmed.length / 50)));
-  const updated: SeedState = { ...seed, coreIdea: after, problem, users, goals,
-    openQuestions, maturity: Math.min(100, seed.maturity + maturityDelta),
+  const updated: SeedState = { ...seed, coreIdea: after, problem, users, goals, constraints, assumptions, openQuestions,
+    maturity: Math.min(100, seed.maturity + maturityDelta),
     status: seed.status === 'seedling' ? 'growing' : seed.status, updatedAt: now() };
   updated.maturityDimensions = dimensionsFor(updated);
   updated.maturity = calculateMaturity(updated); updated.status = statusForMaturity(updated.maturity);
@@ -46,4 +52,10 @@ export async function applyGrowth(store: SeedStore, seed: SeedState, answer: str
   }
   await addEvent(store, updated, 'grow', `Core idea updated: ${after}`, { branchId });
   return { before, after, seed: updated };
+}
+
+/** Growth is ready to pause once the essential story has been answered. */
+export function growthReady(seed: SeedState): boolean {
+  const answered = seed.openQuestions.filter((question) => question.status === 'answered').length;
+  return answered >= 3 && Boolean(seed.problem) && seed.users.length > 0 && seed.goals.length > 0 && seed.maturity >= 55;
 }

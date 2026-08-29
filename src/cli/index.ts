@@ -6,7 +6,7 @@ import { Branch, HarvestType, SeedState } from '../domain.js';
 import { initializeLanguage, t, currentLanguage, setLanguage } from '../i18n/index.js';
 import { openStore, SeedStore, loadConfig, saveConfig } from '../storage/store.js';
 import { plant, addEvent } from '../core/seed-manager.js';
-import { askGrowthQuestion, applyGrowth } from '../core/growth.js';
+import { askGrowthQuestion, applyGrowth, growthReady } from '../core/growth.js';
 import { branchSuggestions, createBranch, pruneItem, pruneSuggestions } from '../core/branch.js';
 import { calculateMaturity, clearItems, uncertainItems, exploreItems, statusForMaturity } from '../core/maturity.js';
 import { dimensionsFor } from '../ai/provider.js';
@@ -55,6 +55,10 @@ async function currentSeed(store: SeedStore): Promise<SeedState> {
   return store.load();
 }
 function print(value: unknown, json = false): void { if (json) console.log(JSON.stringify(value, null, 2)); else console.log(value); }
+function maxGrowthTurns(): number {
+  const configured = Number(process.env.SEED_MAX_GROW_TURNS);
+  return Number.isFinite(configured) && configured > 0 ? Math.min(50, Math.floor(configured)) : 12;
+}
 
 async function plantCommand(idea: string | undefined, options: CommonOptions): Promise<void> {
   const store = await openStore();
@@ -79,16 +83,21 @@ async function plantCommand(idea: string | undefined, options: CommonOptions): P
   if (options.json) { print({ ...(await store.load()), firstQuestion: question }, true); } else {
     console.log(`${t('plant.created')}\n${t('plant.growNext')}`);
     if (!process.stdin.isTTY) { console.log(`\n${question}`); return; }
-    while (true) {
+    let turns = 0;
+    while (!growthReady(seed) && turns < maxGrowthTurns()) {
       const answer = await input({ message: `${question}\n${t('grow.finishHint')}` });
       if (!answer.trim()) break;
       const result = await applyGrowth(store, seed, answer, options.provider);
       seed = result.seed;
+      turns += 1;
       console.log(`${t('grow.update')}\n${t('grow.before')}: "${result.before}"\n${t('grow.now')}:    "${result.after}"\n\n${t('grow.saved', { maturity: seed.maturity })}`);
       if (result.after.length > 180) console.log(`\n${t('grow.pruneHint')}`);
+      if (growthReady(seed)) break;
       question = await askGrowthQuestion(store, seed, options.provider, undefined, options.model, currentLanguage());
       seed = await store.load();
     }
+    if (growthReady(seed)) console.log(`\n${t('grow.ready')}`);
+    else if (turns >= maxGrowthTurns()) console.log(`\n${t('grow.limit', { turns })}`);
   }
 }
 
@@ -112,16 +121,33 @@ grow.action(async (options: CommonOptions & { answer?: string; interactive?: boo
   const store = await openStore(); let seed = await currentSeed(store);
   const branchId = options.branch ?? seed.activeBranch;
   let answer = options.answer;
-  if (!answer) {
-    const question = await askGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage());
-    if (options.interactive === false || !process.stdin.isTTY) { print({ question }, Boolean(options.json)); return; }
-    answer = await input({ message: question });
+  if (answer) {
+    const result = await applyGrowth(store, seed, answer, options.provider, branchId);
+    seed = result.seed;
+    if (options.json) print({ before: result.before, after: result.after, maturity: seed.maturity, status: seed.status }, true);
+    else { console.log(`${t('grow.update')}\n${t('grow.before')}: "${result.before}"\n${t('grow.now')}:    "${result.after}"\n\n${t('grow.saved', { maturity: seed.maturity })}`); if (result.after.length > 180) console.log(`\n${t('grow.pruneHint')}`); }
+    return;
   }
-  if (!answer?.trim()) throw new Error(t('grow.answerRequired'));
-  const result = await applyGrowth(store, seed, answer, options.provider, branchId);
-  seed = result.seed;
-  if (options.json) print({ before: result.before, after: result.after, maturity: seed.maturity, status: seed.status }, true);
-  else { console.log(`${t('grow.update')}\n${t('grow.before')}: "${result.before}"\n${t('grow.now')}:    "${result.after}"\n\n${t('grow.saved', { maturity: seed.maturity })}`); if (result.after.length > 180) console.log(`\n${t('grow.pruneHint')}`); }
+  const interactive = options.interactive !== false && process.stdin.isTTY && !options.json;
+  if (!interactive) {
+    const question = await askGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage());
+    print({ question }, Boolean(options.json));
+    return;
+  }
+  let turns = 0;
+  while (!growthReady(seed) && turns < maxGrowthTurns()) {
+    const question = await askGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage());
+    seed = await store.load();
+    answer = await input({ message: `${question}\n${t('grow.finishHint')}` });
+    if (!answer.trim()) break;
+    const result = await applyGrowth(store, seed, answer, options.provider, branchId);
+    seed = result.seed;
+    turns += 1;
+    console.log(`${t('grow.update')}\n${t('grow.before')}: "${result.before}"\n${t('grow.now')}:    "${result.after}"\n\n${t('grow.saved', { maturity: seed.maturity })}`);
+    if (result.after.length > 180) console.log(`\n${t('grow.pruneHint')}`);
+  }
+  if (growthReady(seed)) console.log(`\n${t('grow.ready')}`);
+  else if (turns >= maxGrowthTurns()) console.log(`\n${t('grow.limit', { turns })}`);
 }, options));
 
 const branch = addCommon(program.command('branch').description(t('help.branch'))).argument('[selection]', 'index, name, or list');

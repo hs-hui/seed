@@ -51,6 +51,8 @@ Bare `npx seed` only resolves this CLI when `@seed-cli/seed` is already installe
 
 The CLI defaults to English. Use `--lang ko` or `SEED_LANG=ko` for Korean UI. The first interactive run asks for both language and provider; `seed --setup` opens that wizard again. AI responses follow the selected language, including the local fallback.
 
+In interactive mode, `seed` and `seed grow` keep the question → answer → summary loop running until the seed has enough essential context. Press Enter on an empty answer to pause and resume later with `seed grow`.
+
 ## AI providers
 
 API keys are read from environment variables and are never written to `.seed/` or the config file:

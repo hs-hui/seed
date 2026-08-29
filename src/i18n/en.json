@@ -7,6 +7,8 @@
   "grow.questionFallback": "What is the most important problem this idea should solve?",
   "grow.answerRequired": "Please provide an answer with --answer or use interactive mode.",
   "grow.finishHint": "Press Enter without an answer to finish.",
+  "grow.ready": "This seed has enough clarity for now. Run `seed bloom` to review it or `seed grow` to keep exploring.",
+  "grow.limit": "Growth paused after {turns} turns. Run `seed grow` to continue.",
   "grow.update": "🌱 Growth update",
   "grow.before": "Before",
   "grow.now": "Now",

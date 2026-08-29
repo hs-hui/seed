@@ -43,21 +43,32 @@ export class LocalProvider implements LLMProvider {
         { item: 'Advanced integrations', reason: 'Can wait until the primary user loop is useful.' },
       ] });
     }
+    const value = (label: string): string => prompt.match(new RegExp(`(?:^|\\n)${label}:([^\\n]*)`))?.[1]?.trim() ?? '';
+    const problem = value('problem'); const users = value('users'); const goals = value('goals');
+    const constraints = value('constraints'); const assumptions = value('assumptions');
     const question = this.language === 'ko'
-      ? prompt.includes('problem: \n')
+      ? !problem
         ? '이 아이디어가 가장 먼저 도와야 할 사람은 누구이며, 그 사람이 겪는 가장 큰 어려움은 무엇인가요?'
-        : prompt.includes('openQuestions:') && !prompt.endsWith('openQuestions: ')
-          ? '만들기 전에 가장 먼저 답해야 할 미해결 질문은 무엇인가요?'
-          : prompt.includes('users: \n')
-            ? '이 아이디어의 첫 번째 유용한 버전을 누가 경험해야 하나요?'
-            : '사용자가 이 아이디어에서 얻어야 할 다음 구체적인 결과는 무엇인가요?'
-      : prompt.includes('problem: \n')
+        : !users
+          ? '이 아이디어의 첫 번째 유용한 버전을 누가 경험해야 하나요?'
+          : !goals
+            ? '사용자가 이 아이디어에서 얻어야 할 다음 구체적인 결과는 무엇인가요?'
+            : !constraints
+              ? '첫 번째 버전에서 반드시 지켜야 할 범위나 제약은 무엇인가요?'
+              : !assumptions
+                ? '이 아이디어가 작동하려면 반드시 참이어야 하는 가정은 무엇인가요?'
+                : '출시 전에 가장 확실하게 검증하고 싶은 것은 무엇인가요?'
+      : !problem
         ? 'Who is the first person this should help, and what is their most painful moment?'
-        : prompt.includes('openQuestions:') && !prompt.endsWith('openQuestions: ')
-          ? 'Which open question is most important to answer before building?'
-          : prompt.includes('users: \n')
-            ? 'Who should experience the first useful version of this idea?'
-            : 'What is the next concrete outcome a user should get from this idea?';
+        : !users
+          ? 'Who should experience the first useful version of this idea?'
+          : !goals
+            ? 'What is the next concrete outcome a user should get from this idea?'
+            : !constraints
+              ? 'What scope or constraint must the first version respect?'
+              : !assumptions
+                ? 'What assumption must be true for this idea to work?'
+                : 'What would you most want to validate before launch?';
     return JSON.stringify({ question, maturityDelta: 3 });
   }
 }
@@ -208,7 +219,7 @@ export async function nextQuestion(seed: SeedState, providerId?: string, model?:
     const context = buildContext(seed, 'grow');
     response = await provider.ask(`GROW_QUESTION\ncoreIdea: ${context.coreIdea}\noriginalIdea: ${seed.originalIdea}\nproblem: ${seed.problem}\nusers: ${seed.users.join(', ')}\ngoals: ${seed.goals.join(' | ')}\nconstraints: ${seed.constraints.join(' | ')}\nassumptions: ${seed.assumptions.join(' | ')}\nconfirmedDecisions: ${context.importantDecisions.map((decision) => decision.decision).join(' | ')}\nopenQuestions: ${context.openQuestions.map((question) => question.question).join(' | ')}\nReturn JSON only: {"question":"one focused question","maturityDelta":1-8}`);
   } catch {
-    response = await new LocalProvider(language).ask(`GROW_QUESTION\ncoreIdea: ${seed.coreIdea}\nproblem: ${seed.problem}\nusers: ${seed.users.join(', ')}\nopenQuestions: `);
+    response = await new LocalProvider(language).ask(`GROW_QUESTION\ncoreIdea: ${seed.coreIdea}\noriginalIdea: ${seed.originalIdea}\nproblem: ${seed.problem}\nusers: ${seed.users.join(', ')}\ngoals: ${seed.goals.join(' | ')}\nconstraints: ${seed.constraints.join(' | ')}\nassumptions: ${seed.assumptions.join(' | ')}\nopenQuestions: `);
   }
   const parsed = parseJsonObject(response);
   if (typeof parsed?.question === 'string' && parsed.question.trim()) {
@@ -240,6 +251,15 @@ export async function suggestPrune(seed: SeedState, providerId?: string, model?:
 
 export function dimensionsFor(seed: SeedState): MaturityDimension[] {
   const hasProblem = Boolean(seed.problem); const hasUser = seed.users.length > 0; const hasGoals = seed.goals.length > 0; const hasBranch = seed.branches.length > 0;
-  const base: Record<string, number> = { problem: hasProblem ? 70 : 25, user: hasUser ? 70 : 20, 'core value': hasGoals ? 65 : 30, differentiation: hasBranch ? 55 : 25, scope: seed.prunedItems.length ? 70 : 40, feasibility: 45, motivation: 65, confidence: seed.decisions.length ? 65 : 35 };
+  const base: Record<string, number> = {
+    problem: hasProblem ? 70 : 25,
+    user: hasUser ? 70 : 20,
+    'core value': hasGoals ? 65 : 30,
+    differentiation: hasBranch ? 70 : seed.goals.length > 1 ? 50 : 25,
+    scope: seed.prunedItems.length || seed.constraints.length ? 70 : 40,
+    feasibility: seed.assumptions.length ? 65 : 45,
+    motivation: hasGoals ? 75 : 65,
+    confidence: seed.decisions.length || seed.openQuestions.some((question) => question.status === 'answered') ? 55 : 35,
+  };
   return seed.maturityDimensions.map((dimension) => ({ ...dimension, score: base[dimension.name] ?? dimension.score, reason: (base[dimension.name] ?? dimension.score) >= 60 ? 'Supported by the current seed state.' : 'Needs another focused growth turn.' }));
 }
