@@ -4,3 +4,4 @@ coverage/
 .seed/
 .env
 .DS_Store
+# Seed - idea growth tool

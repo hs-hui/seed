@@ -8,19 +8,29 @@ import { calculateMaturity, statusForMaturity } from './maturity.js';
 export async function askGrowthQuestion(store: SeedStore, seed: SeedState, providerId?: string, branchId?: string, model?: string): Promise<string> {
   const suggestion = await nextQuestion(seed, providerId, model);
   await addConversation(store, { seedId: seed.id, ...(branchId ? { branchId } : {}), role: 'assistant', type: 'question', content: suggestion.question });
+  const existing = seed.openQuestions.find((question) => question.status === 'open' && question.question === suggestion.question && question.branchId === branchId);
+  if (!existing) {
+    const question: OpenQuestion = { id: randomUUID(), seedId: seed.id, ...(branchId ? { branchId } : {}), question: suggestion.question,
+      importance: 'medium', status: 'open', createdAt: now() };
+    await store.save({ ...seed, openQuestions: [...seed.openQuestions, question], updatedAt: now() });
+  }
   return suggestion.question;
 }
 export async function applyGrowth(store: SeedStore, seed: SeedState, answer: string, providerId?: string, branchId?: string): Promise<{ before: string; after: string; seed: SeedState }> {
   const before = seed.coreIdea;
   await addConversation(store, { seedId: seed.id, ...(branchId ? { branchId } : {}), role: 'user', type: 'answer', content: answer });
   const trimmed = answer.trim();
-  const after = trimmed.length > 160 ? `${before} — ${trimmed.slice(0, 157)}...` : `${before} — ${trimmed}`;
-  const question: OpenQuestion = {
-    id: randomUUID(), seedId: seed.id, ...(branchId ? { branchId } : {}),
-    question: 'What is the next concrete outcome a user should get?', importance: 'medium', status: 'open', createdAt: now(),
-  };
-  const updated: SeedState = { ...seed, coreIdea: after, problem: seed.problem || trimmed, goals: seed.goals.length ? seed.goals : [trimmed],
-    openQuestions: [...seed.openQuestions.filter((q) => q.question !== question.question), question], maturity: Math.min(100, seed.maturity + 5),
+  const after = `${before} — ${trimmed}`.slice(0, 240);
+  const conversations = await store.conversations(seed.id);
+  const asked = [...conversations].reverse().find((entry) => entry.role === 'assistant' && entry.type === 'question' && entry.branchId === branchId);
+  const openQuestions = seed.openQuestions.map((question) => question.question === asked?.content && question.status === 'open'
+    ? { ...question, status: 'answered' as const, answer: trimmed, answeredAt: now() } : question);
+  const users = asked?.content.toLowerCase().includes('who') && !seed.users.includes(trimmed) ? [...seed.users, trimmed.slice(0, 120)] : seed.users;
+  const problem = asked?.content.toLowerCase().includes('problem') && !seed.problem ? trimmed : seed.problem;
+  const goals = !asked?.content.toLowerCase().includes('who') && !asked?.content.toLowerCase().includes('problem') && !seed.goals.includes(trimmed)
+    ? [...seed.goals, trimmed.slice(0, 160)] : seed.goals;
+  const updated: SeedState = { ...seed, coreIdea: after, problem, users, goals,
+    openQuestions, maturity: Math.min(100, seed.maturity + 5),
     status: seed.status === 'seedling' ? 'growing' : seed.status, updatedAt: now() };
   updated.maturityDimensions = dimensionsFor(updated);
   updated.maturity = calculateMaturity(updated); updated.status = statusForMaturity(updated.maturity);

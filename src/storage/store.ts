@@ -7,6 +7,7 @@ import { Branch, ConversationEntry, GrowthEvent, SeedState, seedSchema, now } fr
 export class SeedStore {
   constructor(public readonly root: string) {}
   get base(): string { return path.join(this.root, '.seed'); }
+  async hasSeed(): Promise<boolean> { return exists(path.join(this.base, 'seed.json')); }
   async load(): Promise<SeedState> {
     const value = seedSchema.parse(await readJson<unknown>(path.join(this.base, 'seed.json')));
     return value;
@@ -15,7 +16,10 @@ export class SeedStore {
     await backup(path.join(this.base, 'seed.json'), path.join(this.base, '.backup', 'seed.json.bak'));
     await atomicWrite(path.join(this.base, 'seed.json'), `${JSON.stringify({ ...seed, updatedAt: now() }, null, 2)}\n`);
   }
-  async create(seed: SeedState): Promise<void> { await ensureDir(this.base); await this.save(seed); }
+  async create(seed: SeedState): Promise<void> {
+    await Promise.all(['conversations', 'branches', 'decisions', 'research', 'harvest', 'history', '.backup'].map((directory) => ensureDir(path.join(this.base, directory))));
+    await this.save(seed);
+  }
   async appendConversation(entry: ConversationEntry): Promise<void> {
     await atomicWrite(path.join(this.base, 'conversations', `${entry.id}.json`), `${JSON.stringify(entry, null, 2)}\n`);
   }
@@ -58,7 +62,15 @@ export async function configPath(): Promise<string> {
   const home = process.env.SEED_HOME ?? path.join(os.homedir(), '.seed'); await ensureDir(home); return path.join(home, 'config.json');
 }
 export async function loadConfig(): Promise<GlobalConfig> {
-  const file = await configPath(); if (!(await exists(file))) return defaultConfig;
-  try { return { ...defaultConfig, ...(await readJson<GlobalConfig>(file)) }; } catch { return defaultConfig; }
+  const file = await configPath();
+  let global: GlobalConfig = { ...defaultConfig, providers: [...defaultConfig.providers] };
+  if (await exists(file)) {
+    try { const parsed = await readJson<Partial<GlobalConfig>>(file); global = { ...global, ...parsed, providers: parsed.providers ?? global.providers }; } catch { /* fall back to defaults */ }
+  }
+  const projectFile = path.join(process.cwd(), '.seed', 'config.json');
+  if (await exists(projectFile)) {
+    try { const project = await readJson<Partial<GlobalConfig>>(projectFile); return { ...global, ...project, providers: project.providers ?? global.providers }; } catch { /* ignore invalid project override */ }
+  }
+  return global;
 }
 export async function saveConfig(config: GlobalConfig): Promise<void> { await atomicWrite(await configPath(), `${JSON.stringify(config, null, 2)}\n`); }

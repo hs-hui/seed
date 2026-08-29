@@ -24,3 +24,11 @@ export async function listFiles(dir: string): Promise<string[]> {
   if (!(await exists(dir))) return [];
   return (await readdir(dir, { withFileTypes: true })).filter((entry) => entry.isFile()).map((entry) => path.join(dir, entry.name));
 }
+export async function ensureLine(filePath: string, line: string): Promise<void> {
+  let content = '';
+  try { content = await readFile(filePath, 'utf8'); } catch { /* file will be created */ }
+  if (!content.split(/\r?\n/).some((entry) => entry.trim() === line.trim())) {
+    const suffix = content.length && !content.endsWith('\n') ? '\n' : '';
+    await writeFile(filePath, `${content}${suffix}${line}\n`, 'utf8');
+  }
+}

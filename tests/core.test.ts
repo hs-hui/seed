@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { SeedStore } from '../src/storage/store.js';
 import { plant } from '../src/core/seed-manager.js';
-import { applyGrowth } from '../src/core/growth.js';
+import { applyGrowth, askGrowthQuestion } from '../src/core/growth.js';
 import { calculateMaturity } from '../src/core/maturity.js';
 import { harvest } from '../src/core/harvest.js';
 
@@ -14,10 +14,14 @@ describe('Seed MVP flow', () => {
     try {
       const store = new SeedStore(root);
       const seed = await plant(store, 'A repository guide for new developers');
-      const result = await applyGrowth(store, seed, 'Help a developer find the right starting point.');
+      const question = await askGrowthQuestion(store, seed);
+      const prompted = await store.load();
+      expect(prompted.openQuestions.some((entry) => entry.question === question && entry.status === 'open')).toBe(true);
+      const result = await applyGrowth(store, prompted, 'Help a developer find the right starting point.');
       expect(result.seed.coreIdea).toContain('Help a developer');
       expect(result.seed.maturity).toBeGreaterThan(0);
-      expect((await store.conversations(seed.id)).length).toBe(2);
+      expect((await store.conversations(seed.id)).length).toBe(3);
+      expect((await store.load()).openQuestions.every((entry) => entry.status === 'answered')).toBe(true);
       expect((await store.events(seed.id)).map((event) => event.type)).toEqual(['plant', 'grow']);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
@@ -39,6 +43,19 @@ describe('Seed MVP flow', () => {
       const store = new SeedStore(root); const seed = await plant(store, 'A small idea');
       const one = await harvest(store, seed, 'idea', 'en'); const two = await harvest(store, seed, 'idea', 'en');
       expect(one).toMatch(/idea-v1\.md$/); expect(two).toMatch(/idea-v2\.md$/);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('harvests all document types with the required PRD/TRD sections', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'seed-all-'));
+    try {
+      const store = new SeedStore(root); const seed = await plant(store, 'A small idea');
+      const files = await harvest(store, seed, 'all', 'en');
+      expect(files).toHaveLength(6);
+      const { readFile } = await import('node:fs/promises');
+      const prd = await readFile(files.find((file) => file.endsWith('prd-v1.md'))!, 'utf8');
+      const trd = await readFile(files.find((file) => file.endsWith('trd-v1.md'))!, 'utf8');
+      expect(prd).toContain('## 13. Open Questions'); expect(trd).toContain('## 21. Future Scalability');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 });

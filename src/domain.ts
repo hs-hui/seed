@@ -34,7 +34,11 @@ export type GrowthEvent = {
   id: string; seedId: string; type: string; message: string; createdAt: string;
   metadata?: Record<string, unknown>;
 };
-export type HarvestType = 'idea' | 'brief' | 'prd' | 'trd';
+export type HarvestType = 'idea' | 'brief' | 'prd' | 'trd' | 'readme' | 'prompt';
+export type ResearchEntry = {
+  id: string; seedId: string; source: string; title: string; summary: string;
+  relevance: 'low' | 'medium' | 'high'; retrievedAt: string; isVerified: boolean; isEstimate: boolean;
+};
 export type SeedState = {
   version: number; id: string; name: string; status: SeedStatus; maturity: number;
   maturityDimensions: MaturityDimension[]; originalIdea: string; coreIdea: string;

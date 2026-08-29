@@ -17,6 +17,7 @@ export async function pruneSuggestions(seed: SeedState, providerId?: string, mod
 export async function pruneItem(store: SeedStore, seed: SeedState, item: string): Promise<SeedState> {
   const branches = await store.branches(seed.id); const target = branches.find((b) => b.name.toLowerCase() === item.toLowerCase() || b.id === item);
   if (target) { await store.saveBranch({ ...target, status: 'pruned', updatedAt: now() }); }
-  const updated: SeedState = { ...seed, prunedItems: seed.prunedItems.includes(item) ? seed.prunedItems : [...seed.prunedItems, item], status: 'pruning', updatedAt: now() };
+  const updated: SeedState = { ...seed, prunedItems: seed.prunedItems.includes(item) ? seed.prunedItems : [...seed.prunedItems, item],
+    constraints: seed.constraints.includes(`Pruned from MVP: ${item}`) ? seed.constraints : [...seed.constraints, `Pruned from MVP: ${item}`], status: 'pruning', updatedAt: now() };
   updated.maturity = Math.min(100, updated.maturity + 2); await store.save(updated); await addEvent(store, updated, 'prune', `Pruned: ${item}`); return updated;
 }

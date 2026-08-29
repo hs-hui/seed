@@ -1,5 +1,6 @@
 import { SeedState, Branch, MaturityDimension } from '../domain.js';
 import { loadConfig, ProviderConfig } from '../storage/store.js';
+import { buildContext } from './context-builder.js';
 
 export interface LLMProvider {
   readonly id: string;
@@ -85,23 +86,31 @@ export async function getProvider(id?: string, model?: string): Promise<LLMProvi
 export type GrowthSuggestion = { question: string; maturityDelta: number };
 export async function nextQuestion(seed: SeedState, providerId?: string, model?: string): Promise<GrowthSuggestion> {
   const provider = await getProvider(providerId, model);
-  const response = await provider.ask(`GROW_QUESTION\ncoreIdea: ${seed.coreIdea}\nproblem: ${seed.problem}\nusers: ${seed.users.join(', ')}\nopenQuestions: ${seed.openQuestions.filter((q) => q.status === 'open').map((q) => q.question).join(' | ')}`);
+  let response = '';
+  try {
+    const context = buildContext(seed, 'grow');
+    response = await provider.ask(`GROW_QUESTION\ncoreIdea: ${context.coreIdea}\nproblem: ${seed.problem}\nusers: ${seed.users.join(', ')}\nopenQuestions: ${context.openQuestions.map((q) => q.question).join(' | ')}`);
+  } catch {
+    response = await new LocalProvider().ask(`GROW_QUESTION\ncoreIdea: ${seed.coreIdea}\nproblem: ${seed.problem}\nusers: ${seed.users.join(', ')}\nopenQuestions: `);
+  }
   try { const parsed = JSON.parse(response) as Partial<GrowthSuggestion>; if (parsed.question) return { question: parsed.question, maturityDelta: parsed.maturityDelta ?? 3 }; } catch { /* fallback */ }
   return { question: 'What is the next concrete outcome a user should get from this idea?', maturityDelta: 3 };
 }
 export async function suggestBranches(seed: SeedState, providerId?: string, model?: string): Promise<Array<{ name: string; summary: string }>> {
-  const provider = await getProvider(providerId, model); const response = await provider.ask(`BRANCH_SUGGEST\ncoreIdea: ${seed.coreIdea}`);
+  const provider = await getProvider(providerId, model); let response = '';
+  try { response = await provider.ask(`BRANCH_SUGGEST\ncoreIdea: ${seed.coreIdea}`); } catch { response = await new LocalProvider().ask('BRANCH_SUGGEST'); }
   try { const parsed = JSON.parse(response) as { branches?: Array<{ name: string; summary: string }> }; if (parsed.branches?.length) return parsed.branches.slice(0, 4); } catch { /* fallback */ }
   return [{ name: 'Focused workflow', summary: seed.coreIdea }];
 }
 export async function suggestPrune(seed: SeedState, providerId?: string, model?: string): Promise<Array<{ item: string; reason: string }>> {
-  const provider = await getProvider(providerId, model); const response = await provider.ask(`PRUNE_SUGGEST\ncoreIdea: ${seed.coreIdea}`);
+  const provider = await getProvider(providerId, model); let response = '';
+  try { response = await provider.ask(`PRUNE_SUGGEST\ncoreIdea: ${seed.coreIdea}`); } catch { response = await new LocalProvider().ask('PRUNE_SUGGEST'); }
   try { const parsed = JSON.parse(response) as { items?: Array<{ item: string; reason: string }> }; if (parsed.items?.length) return parsed.items; } catch { /* fallback */ }
   return [];
 }
 
 export function dimensionsFor(seed: SeedState): MaturityDimension[] {
-  const hasProblem = Boolean(seed.problem || seed.coreIdea !== seed.originalIdea);
+  const hasProblem = Boolean(seed.problem);
   const hasUser = seed.users.length > 0;
   const hasGoals = seed.goals.length > 0;
   const hasBranch = seed.branches.length > 0;

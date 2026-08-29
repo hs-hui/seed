@@ -50,7 +50,7 @@ Use `--lang ko` or `SEED_LANG=ko` for Korean UI. Configure an API key with `seed
 
 ## MVP commands
 
-`seed`, `grow`, `branch`, `prune`, `bloom`, `tree`, `history`, `harvest idea|brief|prd|trd`, and `config` are included. `water`, `sunlight`, `evolve`, lifecycle commands, and remote sync are intentionally left for later phases described in `PRD.md` and `TRD.md`.
+`seed`, `grow`, `branch`, `prune`, `bloom`, `tree`, `history`, `harvest idea|brief|prd|trd|readme|prompt|all`, and `config` are included. `water`, `sunlight`, `evolve`, lifecycle commands, and remote sync are intentionally left for later phases described in `PRD.md` and `TRD.md`.
 
 ## Development
 

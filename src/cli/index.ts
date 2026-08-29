@@ -30,6 +30,7 @@ function run(action: () => Promise<void>, options: CommonOptions = {}): Promise<
   Object.assign(options, { ...program.opts(), ...options });
   return initializeLanguage(options.lang).then(action).catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
+    if (options.json) { console.error(JSON.stringify({ error: message })); process.exitCode = 1; return; }
     if (message === 'no-seed') console.error(t('error.noSeed'));
     else if (message === 'seed-exists') console.error(t('error.seedExists'));
     else if (message === 'too-many-branches') console.error(t('branch.tooMany'));
@@ -38,22 +39,23 @@ function run(action: () => Promise<void>, options: CommonOptions = {}): Promise<
   });
 }
 async function currentSeed(store: SeedStore): Promise<SeedState> {
-  try { return await store.load(); } catch { throw new Error('no-seed'); }
+  if (!(await store.hasSeed())) throw new Error('no-seed');
+  return store.load();
 }
 function print(value: unknown, json = false): void { if (json) console.log(JSON.stringify(value, null, 2)); else console.log(value); }
 
 async function plantCommand(idea: string | undefined, options: CommonOptions): Promise<void> {
   const store = await openStore();
-  try { await store.load(); throw new Error('seed-exists'); } catch (error) { if (error instanceof Error && error.message === 'seed-exists') throw error; }
+  if (await store.hasSeed()) throw new Error('seed-exists');
   if (!idea) {
     if (!process.stdin.isTTY) throw new Error('An idea is required in non-interactive mode.');
     console.log(`${t('welcome.title')}\n${t('welcome.subtitle')}`); idea = (await input({ message: t('welcome.prompt') })).trim();
   }
   if (!idea) throw new Error('An idea is required.');
   const seed = await plant(store, idea);
-  if (options.json) { print(seed, true); } else {
+  const question = await askGrowthQuestion(store, seed, options.provider, undefined, options.model);
+  if (options.json) { print({ ...(await store.load()), firstQuestion: question }, true); } else {
     console.log(`${t('plant.created')}\n${t('plant.growNext')}`);
-    const question = await askGrowthQuestion(store, seed, options.provider, undefined, options.model);
     console.log(`\n${question}`);
   }
 }
@@ -72,7 +74,7 @@ grow.action(async (options: CommonOptions & { answer?: string; interactive?: boo
   const result = await applyGrowth(store, seed, answer, options.provider, branchId);
   seed = result.seed;
   if (options.json) print({ before: result.before, after: result.after, maturity: seed.maturity, status: seed.status }, true);
-  else console.log(`${t('grow.update')}\n${t('grow.before')}: "${result.before}"\n${t('grow.now')}:    "${result.after}"\n\n${t('grow.saved', { maturity: seed.maturity })}`);
+  else { console.log(`${t('grow.update')}\n${t('grow.before')}: "${result.before}"\n${t('grow.now')}:    "${result.after}"\n\n${t('grow.saved', { maturity: seed.maturity })}`); if (result.after.length > 180) console.log(`\n${t('grow.pruneHint')}`); }
 }, options));
 
 const branch = addCommon(program.command('branch').description(t('help.branch'))).argument('[selection]', 'index, name, or list');
@@ -97,6 +99,7 @@ branch.action(async (selection: string | undefined, options: CommonOptions) => r
 const prune = addCommon(program.command('prune').description(t('help.prune'))).argument('[item]', 'Item or branch to prune');
 prune.action(async (item: string | undefined, options: CommonOptions) => run(async () => {
   const store = await openStore(); const seed = await currentSeed(store); const suggestions = await pruneSuggestions(seed, options.provider, options.model);
+  item ??= options.branch;
   if (!item) {
     if (options.json || !process.stdin.isTTY) { print({ suggestions }, Boolean(options.json)); return; }
     if (!suggestions.length) { console.log(t('prune.none')); return; }
@@ -114,6 +117,7 @@ bloom.action(async (options: CommonOptions) => run(async () => {
   if (options.json) print(result, true); else {
     console.log(`${t('bloom.title')}\n`); for (const d of dimensions) console.log(`${d.name.padEnd(18)} ${'█'.repeat(Math.round(d.score / 10))}${'░'.repeat(10 - Math.round(d.score / 10))} ${d.score}%`);
     console.log(`\n${t('bloom.overall', { maturity: updated.maturity })}`); console.log(`${t('bloom.clear')}: ${result.clear.join(', ') || '—'}`); console.log(`${t('bloom.uncertain')}: ${result.uncertain.join(', ') || '—'}`); console.log(`${t('bloom.explore')}: ${result.explore.join('; ') || '—'}`); console.log(`\n${result.disclaimer}`);
+    if (updated.maturity < 80 && result.uncertain.length) console.log(t('bloom.recommend', { items: result.uncertain.slice(0, 2).join(', ') }));
   }
 }, options));
 
@@ -130,15 +134,38 @@ history.action(async (options: CommonOptions & { limit: string }) => run(async (
   if (options.json) print(events, true); else { console.log(t('history.title')); if (!events.length) console.log(t('history.empty')); else for (const event of events) console.log(`${new Date(event.createdAt).toLocaleString()}  ${event.message}`); }
 }, options));
 
-const harvestCommand = addCommon(program.command('harvest').description(t('help.harvest'))).argument('[type]', 'idea, brief, prd, or trd');
-harvestCommand.action(async (type: HarvestType | undefined, options: CommonOptions) => run(async () => {
-  const store = await openStore(); const seed = await currentSeed(store); if (!type) type = 'idea';
-  if (!['idea', 'brief', 'prd', 'trd'].includes(type)) throw new Error(t('harvest.invalid'));
-  const file = await harvest(store, seed, type, currentLanguage()); print(options.json ? { type, file } : t('harvest.saved', { type: harvestTitle(type), file }), Boolean(options.json));
+const harvestCommand = addCommon(program.command('harvest').description(t('help.harvest'))).argument('[type]', 'idea, brief, prd, trd, readme, prompt, or all');
+harvestCommand.action(async (type: HarvestType | 'all' | undefined, options: CommonOptions) => run(async () => {
+  const store = await openStore(); const seed = await currentSeed(store);
+  if (!type && process.stdin.isTTY) type = await select({ message: t('harvest.select'), choices: ['idea', 'brief', 'prd', 'trd', 'readme', 'prompt', 'all'] });
+  type ??= 'idea';
+  if (!['idea', 'brief', 'prd', 'trd', 'readme', 'prompt', 'all'].includes(type)) throw new Error(t('harvest.invalid'));
+  const file = await harvest(store, seed, type, currentLanguage());
+  print(options.json ? { type, file } : t('harvest.saved', { type: harvestTitle(type), file: Array.isArray(file) ? file.join(', ') : file }), Boolean(options.json));
 }, options));
 
-const config = program.command('config').description(t('help.config'));
-config.action(async () => run(async () => { const value = await loadConfig(); console.log(JSON.stringify({ ...value, envKeys: ['OPENAI_API_KEY', 'SEED_GEMINI_API_KEY', 'SEED_ANTHROPIC_API_KEY', 'SEED_API_KEY'] }, null, 2)); }));
+const config = program.command('config').description(t('help.config')).option('--lang <lang>', 'UI language (en or ko)');
+async function configWizard(): Promise<void> {
+  const current = await loadConfig();
+  const selected = await select({ message: t('config.chooseProvider'), choices: [
+    { name: 'Local fallback — no API key', value: 'local' },
+    { name: 'OpenAI — API key', value: 'openai' },
+    { name: 'Google Gemini — API key', value: 'gemini' },
+    { name: 'Anthropic Claude — API key', value: 'anthropic' },
+    { name: 'Custom OpenAI-compatible provider', value: 'custom' },
+  ] });
+  if (selected === 'local') { current.activeProvider = 'local'; await saveConfig(current); console.log(t('config.saved')); return; }
+  const id = selected === 'custom' ? (await input({ message: t('config.providerId'), default: 'custom-1' })).trim() : selected;
+  const baseUrl = selected === 'custom' ? (await input({ message: t('config.baseUrl') })).trim() : undefined;
+  const modelDefaults: Record<string, string> = { openai: 'gpt-4o-mini', gemini: 'gemini-2.5-flash', anthropic: 'claude-3-5-sonnet-latest' };
+  const defaultModel = await input({ message: t('config.model'), default: modelDefaults[selected] ?? 'default' });
+  const existing = current.providers.find((provider) => provider.id === id);
+  const provider = { id, name: id, type: (selected === 'custom' ? 'custom' : selected) as 'openai' | 'gemini' | 'anthropic' | 'custom', defaultModel, enabled: true, ...(baseUrl ? { baseUrl } : {}), ...(existing?.connectionMode ? { connectionMode: existing.connectionMode } : {}) };
+  const key = selected === 'openai' ? (process.env.SEED_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY) : selected === 'gemini' ? process.env.SEED_GEMINI_API_KEY : selected === 'anthropic' ? (process.env.SEED_ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY) : process.env.SEED_API_KEY;
+  if (!key) { console.log(t('config.emptyKey')); return; }
+  current.providers = [...current.providers.filter((entry) => entry.id !== id), provider]; current.activeProvider = id; await saveConfig(current); console.log(t('config.saved'));
+}
+config.action(async (options: CommonOptions) => run(async () => { if (process.stdin.isTTY) await configWizard(); else { const value = await loadConfig(); console.log(JSON.stringify({ ...value, envKeys: ['OPENAI_API_KEY', 'SEED_GEMINI_API_KEY', 'SEED_ANTHROPIC_API_KEY', 'SEED_API_KEY'] }, null, 2)); } }, options));
 config.command('list').description('List providers').action(async () => run(async () => { const value = await loadConfig(); console.log(JSON.stringify(value, null, 2)); }));
 config.command('use').argument('<provider>').description('Select active provider').action(async (provider: string) => run(async () => { const value = await loadConfig(); if (!value.providers.some((p) => p.id === provider)) throw new Error(t('error.invalidProvider', { provider })); value.activeProvider = provider; await saveConfig(value); console.log(t('config.active', { provider })); }));
 config.command('set').argument('<key>').argument('<value>').description('Set provider or language').action(async (key: string, valueArg: string) => run(async () => {
@@ -163,10 +190,10 @@ config.command('unset').argument('<key>').description('Remove a setting').action
 }));
 config.command('test').description('Check the active provider').action(async () => run(async () => {
   const value = await loadConfig(); const active = value.providers.find((p) => p.id === value.activeProvider);
-  if (!active || active.id === 'local') { console.log('Local fallback is ready.'); return; }
+  if (!active || active.id === 'local') { console.log(t('config.localReady')); return; }
   const key = active.type === 'openai' ? (process.env.SEED_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY) : active.type === 'gemini' ? process.env.SEED_GEMINI_API_KEY : active.type === 'anthropic' ? (process.env.SEED_ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY) : process.env.SEED_API_KEY;
-  if (!key) { console.log(t('config.emptyKey')); return; }
-  console.log(`Provider ${active.id} is configured with an environment key.`);
+  if (!key) { console.log(t('config.emptyKey')); process.exitCode = 1; return; }
+  console.log(t('config.keyConfigured', { provider: active.id }));
 }));
 config.command('remove').argument('<provider>').description('Remove a provider').action(async (provider: string) => run(async () => { const value = await loadConfig(); value.providers = value.providers.filter((p) => p.id !== provider); if (value.activeProvider === provider) value.activeProvider = 'local'; await saveConfig(value); console.log(t('config.saved')); }));
 
