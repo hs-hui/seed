@@ -51,7 +51,7 @@ Bare `npx seed` only resolves this CLI when `@seed-cli/seed` is already installe
 
 The CLI defaults to English. Use `--lang ko` or `SEED_LANG=ko` for Korean UI. The first interactive run asks for both language and provider; `seed --setup` opens that wizard again. AI responses follow the selected language, including the local fallback.
 
-In interactive mode, `seed` and `seed grow` keep the question → answer → summary loop running until the seed has enough essential context. Press Enter on an empty answer to pause and resume later with `seed grow`.
+In interactive mode, `seed` and `seed grow` keep the question → answer → summary loop running until the seed has enough essential context. Each turn stores a structured update (summary, maturity delta, contradictions, and next-step suggestions) in `.seed/` and uses recent conversation context for the next question. Press Enter on an empty answer to pause and resume later with `seed grow`.
 
 ## AI providers
 

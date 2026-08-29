@@ -16,6 +16,8 @@
   "grow.before": "이전",
   "grow.now": "현재",
   "grow.saved": "성장을 저장했습니다. 성숙도: {maturity}%",
+  "grow.contradictions": "잠깐, 확인이 필요한 충돌",
+  "grow.suggestions": "다음에 생각해 볼 것",
   "grow.pruneHint": "아이디어의 범위가 넓어지고 있습니다. `seed prune`으로 핵심이 아닌 범위를 검토하세요.",
   "branch.title": "🌿 이 씨앗은 여러 방향으로 자랄 수 있습니다.",
   "branch.select": "가지를 선택하세요 (1-{count})",

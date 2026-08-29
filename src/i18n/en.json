@@ -16,6 +16,8 @@
   "grow.before": "Before",
   "grow.now": "Now",
   "grow.saved": "Growth saved. Maturity: {maturity}%",
+  "grow.contradictions": "One thing to reconcile",
+  "grow.suggestions": "Worth considering next",
   "grow.pruneHint": "This idea is getting broad. Run `seed prune` to review non-essential scope.",
   "branch.title": "🌿 Your seed can grow in several directions.",
   "branch.select": "Choose a branch (1-{count})",

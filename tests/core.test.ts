@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { SeedStore } from '../src/storage/store.js';
 import { plant } from '../src/core/seed-manager.js';
-import { applyGrowth, askGrowthQuestion } from '../src/core/growth.js';
+import { applyGrowth, askGrowthQuestion, growthReady } from '../src/core/growth.js';
 import { calculateMaturity } from '../src/core/maturity.js';
 import { harvest } from '../src/core/harvest.js';
 import { branchSuggestions, createBranch, pruneItem } from '../src/core/branch.js';
@@ -21,8 +21,10 @@ describe('Seed MVP flow', () => {
       const question = await askGrowthQuestion(store, seed, 'local');
       const prompted = await store.load();
       expect(prompted.openQuestions.some((entry) => entry.question === question && entry.status === 'open')).toBe(true);
-      const result = await applyGrowth(store, prompted, 'Help a developer find the right starting point.');
+      const result = await applyGrowth(store, prompted, 'Help a developer find the right starting point.', 'local');
       expect(result.seed.coreIdea).toContain('Help a developer');
+      expect(result.update.updatedSummary).toBe(result.seed.coreIdea);
+      expect(result.update.contradictionsDetected).toEqual([]);
       expect(result.seed.maturity).toBeGreaterThan(0);
       expect((await store.conversations(seed.id)).length).toBe(3);
       expect((await store.load()).openQuestions.every((entry) => entry.status === 'answered')).toBe(true);
@@ -34,6 +36,27 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-empty-'));
     try { await expect(plant(new SeedStore(root), '   ')).rejects.toThrow('idea-required'); }
     finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('keeps the guided conversation focused and reaches a ready seed', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'seed-growth-ready-'));
+    try {
+      const store = new SeedStore(root);
+      let seed = await plant(store, 'A study planning app');
+      const answers = ['High-school students', 'They do not know what to study first', 'A clear plan they can finish today', 'Only planning and completion for v1'];
+      for (const answer of answers) {
+        await askGrowthQuestion(store, seed, 'local', undefined, undefined, 'en');
+        seed = await store.load();
+        seed = (await applyGrowth(store, seed, answer, 'local', undefined, 'en')).seed;
+      }
+      expect(seed.users).toEqual(['High-school students']);
+      expect(seed.problem).toBe('They do not know what to study first');
+      expect(seed.goals).toEqual(['A clear plan they can finish today']);
+      expect(seed.constraints).toEqual(['Only planning and completion for v1']);
+      expect(seed.openQuestions.filter((question) => question.status === 'answered')).toHaveLength(4);
+      expect(growthReady(seed)).toBe(true);
+      expect(seed.maturity).toBeGreaterThanOrEqual(58);
+    } finally { await rm(root, { recursive: true, force: true }); }
   });
 
   it('calculates maturity with open-question penalty and decision bonus', () => {

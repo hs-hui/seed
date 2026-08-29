@@ -8,8 +8,8 @@ import { openStore, SeedStore, loadConfig, saveConfig } from '../storage/store.j
 import { plant, addEvent } from '../core/seed-manager.js';
 import { askGrowthQuestion, applyGrowth, growthReady } from '../core/growth.js';
 import { branchSuggestions, createBranch, pruneItem, pruneSuggestions } from '../core/branch.js';
-import { calculateMaturity, clearItems, uncertainItems, exploreItems, statusForMaturity } from '../core/maturity.js';
-import { DEFAULT_OPENAI_OAUTH_MODEL, dimensionsFor } from '../ai/provider.js';
+import { calculateMaturity, statusForMaturity } from '../core/maturity.js';
+import { DEFAULT_OPENAI_OAUTH_MODEL, evaluateMaturity } from '../ai/provider.js';
 import { providerKey } from '../ai/provider.js';
 import { loginOpenAI, getOpenAIToken } from '../ai/openai-oauth.js';
 import { harvest, harvestTitle } from '../core/harvest.js';
@@ -72,6 +72,17 @@ async function promptGrowthAnswer(question: string, firstTurn: boolean): Promise
   return input({ message: t('grow.answerPrompt') });
 }
 
+function printGrowthSignals(update: { contradictionsDetected: string[]; suggestions: string[] }): void {
+  if (update.contradictionsDetected.length) {
+    console.log(`\n${chalk.yellow(t('grow.contradictions'))}`);
+    for (const item of update.contradictionsDetected) console.log(`  - ${item}`);
+  }
+  if (update.suggestions.length) {
+    console.log(`\n${chalk.cyan(t('grow.suggestions'))}`);
+    for (const item of update.suggestions) console.log(`  - ${item}`);
+  }
+}
+
 async function plantCommand(idea: string | undefined, options: CommonOptions): Promise<void> {
   const store = await openStore();
   const hasSeed = await store.hasSeed();
@@ -99,10 +110,11 @@ async function plantCommand(idea: string | undefined, options: CommonOptions): P
     while (!growthReady(seed) && turns < maxGrowthTurns()) {
       const answer = await promptGrowthAnswer(question, turns === 0);
       if (!answer.trim()) break;
-      const result = await applyGrowth(store, seed, answer, options.provider);
+      const result = await applyGrowth(store, seed, answer, options.provider, undefined, currentLanguage(), options.model);
       seed = result.seed;
       turns += 1;
       console.log(`${t('grow.update')}\n${t('grow.before')}: "${result.before}"\n${t('grow.now')}:    "${result.after}"\n\n${t('grow.saved', { maturity: seed.maturity })}`);
+      printGrowthSignals(result.update);
       if (result.after.length > 180) console.log(`\n${t('grow.pruneHint')}`);
       if (growthReady(seed)) break;
       question = await askGrowthQuestion(store, seed, options.provider, undefined, options.model, currentLanguage());
@@ -134,10 +146,17 @@ grow.action(async (options: CommonOptions & { answer?: string; interactive?: boo
   const branchId = options.branch ?? seed.activeBranch;
   let answer = options.answer;
   if (answer) {
-    const result = await applyGrowth(store, seed, answer, options.provider, branchId);
+    // Scripted one-turn usage (`grow --answer`) may be invoked repeatedly.
+    // If the previous turn already closed its question, create the next one
+    // first so the answer is classified against the right growth focus.
+    if (!seed.openQuestions.some((question) => question.status === 'open' && question.branchId === branchId)) {
+      await askGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage());
+      seed = await store.load();
+    }
+    const result = await applyGrowth(store, seed, answer, options.provider, branchId, currentLanguage(), options.model);
     seed = result.seed;
-    if (options.json) print({ before: result.before, after: result.after, maturity: seed.maturity, status: seed.status }, true);
-    else { console.log(`${t('grow.update')}\n${t('grow.before')}: "${result.before}"\n${t('grow.now')}:    "${result.after}"\n\n${t('grow.saved', { maturity: seed.maturity })}`); if (result.after.length > 180) console.log(`\n${t('grow.pruneHint')}`); }
+    if (options.json) print({ before: result.before, after: result.after, maturity: seed.maturity, status: seed.status, update: result.update }, true);
+    else { console.log(`${t('grow.update')}\n${t('grow.before')}: "${result.before}"\n${t('grow.now')}:    "${result.after}"\n\n${t('grow.saved', { maturity: seed.maturity })}`); printGrowthSignals(result.update); if (result.after.length > 180) console.log(`\n${t('grow.pruneHint')}`); }
     return;
   }
   const interactive = options.interactive !== false && process.stdin.isTTY && !options.json;
@@ -147,15 +166,19 @@ grow.action(async (options: CommonOptions & { answer?: string; interactive?: boo
     return;
   }
   let turns = 0;
-  while (!growthReady(seed) && turns < maxGrowthTurns()) {
+  // An explicit `seed grow` invocation always gets one turn, even when the
+  // previous session reached the pause threshold; this is how users resume
+  // exploration and reach validation questions.
+  while ((turns === 0 || !growthReady(seed)) && turns < maxGrowthTurns()) {
     const question = await askGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage());
     seed = await store.load();
     answer = await promptGrowthAnswer(question, turns === 0);
     if (!answer.trim()) break;
-    const result = await applyGrowth(store, seed, answer, options.provider, branchId);
+    const result = await applyGrowth(store, seed, answer, options.provider, branchId, currentLanguage(), options.model);
     seed = result.seed;
     turns += 1;
     console.log(`${t('grow.update')}\n${t('grow.before')}: "${result.before}"\n${t('grow.now')}:    "${result.after}"\n\n${t('grow.saved', { maturity: seed.maturity })}`);
+    printGrowthSignals(result.update);
     if (result.after.length > 180) console.log(`\n${t('grow.pruneHint')}`);
   }
   if (growthReady(seed)) console.log(`\n${t('grow.ready')}`);
@@ -195,10 +218,10 @@ prune.action(async (item: string | undefined, options: CommonOptions) => run(asy
 
 const bloom = addCommon(program.command('bloom').description(t('help.bloom')));
 bloom.action(async (options: CommonOptions) => run(async () => {
-  const store = await openStore(); const seed = await currentSeed(store); const dimensions = dimensionsFor(seed);
+  const store = await openStore(); const seed = await currentSeed(store); const evaluation = await evaluateMaturity(seed, options.provider, options.model, currentLanguage()); const dimensions = evaluation.dimensions;
   const updated = { ...seed, maturityDimensions: dimensions, maturity: 0, status: seed.status };
   updated.maturity = calculateMaturity(updated); updated.status = statusForMaturity(updated.maturity); await store.save(updated); await addEvent(store, updated, 'bloom', `Bloom check: ${updated.maturity}%`);
-  const result = { maturity: updated.maturity, status: updated.status, dimensions, clear: clearItems(updated), uncertain: uncertainItems(updated), explore: exploreItems(updated), disclaimer: t('bloom.disclaimer') };
+  const result = { maturity: updated.maturity, status: updated.status, dimensions, clear: evaluation.clear, uncertain: evaluation.uncertain, explore: evaluation.explore, disclaimer: t('bloom.disclaimer') };
   if (options.json) print(result, true); else {
     console.log(`${t('bloom.title')}\n`); for (const d of dimensions) console.log(`${d.name.padEnd(18)} ${'█'.repeat(Math.round(d.score / 10))}${'░'.repeat(10 - Math.round(d.score / 10))} ${d.score}%`);
     console.log(`\n${t('bloom.overall', { maturity: updated.maturity })}`); console.log(`${t('bloom.clear')}: ${result.clear.join(', ') || '—'}`); console.log(`${t('bloom.uncertain')}: ${result.uncertain.join(', ') || '—'}`); console.log(`${t('bloom.explore')}: ${result.explore.join('; ') || '—'}`); console.log(`\n${result.disclaimer}`);
