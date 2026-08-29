@@ -7,7 +7,7 @@ import { openaiCredentials } from '@openai-oauth/local';
 import { generateText } from 'ai';
 
 export type ProviderLanguage = 'en' | 'ko';
-export const DEFAULT_OPENAI_OAUTH_MODEL = 'gpt-5.4-mini';
+export const DEFAULT_OPENAI_OAUTH_MODEL = 'gpt-5.6-luna';
 
 export interface LLMProvider {
   readonly id: string;
