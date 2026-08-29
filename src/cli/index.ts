@@ -73,11 +73,22 @@ async function plantCommand(idea: string | undefined, options: CommonOptions): P
     console.log(`${t('welcome.title')}\n${t('welcome.subtitle')}`); idea = (await input({ message: t('welcome.prompt') })).trim();
   }
   if (!idea) throw new Error('An idea is required.');
-  const seed = await plant(store, idea);
-  const question = await askGrowthQuestion(store, seed, options.provider, undefined, options.model, currentLanguage());
+  let seed = await plant(store, idea);
+  let question = await askGrowthQuestion(store, seed, options.provider, undefined, options.model, currentLanguage());
+  seed = await store.load();
   if (options.json) { print({ ...(await store.load()), firstQuestion: question }, true); } else {
     console.log(`${t('plant.created')}\n${t('plant.growNext')}`);
-    console.log(`\n${question}`);
+    if (!process.stdin.isTTY) { console.log(`\n${question}`); return; }
+    while (true) {
+      const answer = await input({ message: `${question}\n${t('grow.finishHint')}` });
+      if (!answer.trim()) break;
+      const result = await applyGrowth(store, seed, answer, options.provider);
+      seed = result.seed;
+      console.log(`${t('grow.update')}\n${t('grow.before')}: "${result.before}"\n${t('grow.now')}:    "${result.after}"\n\n${t('grow.saved', { maturity: seed.maturity })}`);
+      if (result.after.length > 180) console.log(`\n${t('grow.pruneHint')}`);
+      question = await askGrowthQuestion(store, seed, options.provider, undefined, options.model, currentLanguage());
+      seed = await store.load();
+    }
   }
 }
 

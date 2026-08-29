@@ -6,6 +6,7 @@
   "plant.growNext": "Let's grow it.",
   "grow.questionFallback": "What is the most important problem this idea should solve?",
   "grow.answerRequired": "Please provide an answer with --answer or use interactive mode.",
+  "grow.finishHint": "Press Enter without an answer to finish.",
   "grow.update": "🌱 Growth update",
   "grow.before": "Before",
   "grow.now": "Now",

@@ -6,6 +6,7 @@
   "plant.growNext": "이제 함께 키워볼게요.",
   "grow.questionFallback": "이 아이디어가 해결해야 할 가장 중요한 문제는 무엇인가요?",
   "grow.answerRequired": "--answer로 답을 주거나 인터랙티브 모드를 사용하세요.",
+  "grow.finishHint": "답변 없이 Enter를 누르면 대화를 마칩니다.",
   "grow.update": "🌱 성장 업데이트",
   "grow.before": "이전",
   "grow.now": "현재",
