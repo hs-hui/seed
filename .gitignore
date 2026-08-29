@@ -1,0 +1,6 @@
+node_modules/
+dist/
+coverage/
+.seed/
+.env
+.DS_Store
