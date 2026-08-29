@@ -7,6 +7,9 @@ import { plant } from '../src/core/seed-manager.js';
 import { applyGrowth, askGrowthQuestion } from '../src/core/growth.js';
 import { calculateMaturity } from '../src/core/maturity.js';
 import { harvest } from '../src/core/harvest.js';
+import { branchSuggestions, createBranch, pruneItem } from '../src/core/branch.js';
+import { dimensionsFor } from '../src/ai/provider.js';
+import { statusForMaturity } from '../src/core/maturity.js';
 
 describe('Seed MVP flow', () => {
   it('plants, grows, and preserves conversations/history', async () => {
@@ -63,6 +66,29 @@ describe('Seed MVP flow', () => {
       const prd = await readFile(files.find((file) => file.endsWith('prd-v1.md'))!, 'utf8');
       const trd = await readFile(files.find((file) => file.endsWith('trd-v1.md'))!, 'utf8');
       expect(prd).toContain('## 13. Open Questions'); expect(trd).toContain('## 21. Future Scalability');
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('keeps branches independent and enforces the active branch limit', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'seed-branch-'));
+    try {
+      const store = new SeedStore(root); const seed = await plant(store, 'Explore a developer workflow');
+      const suggestions = await branchSuggestions(seed); expect(suggestions.length).toBeGreaterThanOrEqual(2); expect(suggestions.length).toBeLessThanOrEqual(4);
+      let current = await createBranch(store, seed, suggestions[0]!.name, suggestions[0]!.summary);
+      let latest = await store.load();
+      for (let index = 1; index < 5; index += 1) { const suggestion = suggestions[index % suggestions.length]!; await createBranch(store, latest, `${suggestion.name}-${index}`, suggestion.summary); latest = await store.load(); }
+      await expect(createBranch(store, latest, 'Overflow', 'Too broad')).rejects.toThrow('too-many-branches');
+      expect((await store.branches(seed.id)).filter((branch) => branch.status === 'active')).toHaveLength(5);
+      const pruned = await pruneItem(store, latest, current.id); expect(pruned.activeBranch).not.toBe(current.id); expect((await store.branches(seed.id)).find((branch) => branch.id === current.id)?.status).toBe('pruned');
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('evaluates all maturity dimensions and maps the bloom state', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'seed-bloom-'));
+    try {
+      const store = new SeedStore(root); const seed = await plant(store, 'A focused project');
+      const updated = { ...seed, problem: 'A concrete problem', users: ['developers'], goals: ['a useful outcome'], maturityDimensions: dimensionsFor({ ...seed, problem: 'A concrete problem', users: ['developers'], goals: ['a useful outcome'] }) };
+      expect(updated.maturityDimensions).toHaveLength(8); expect(statusForMaturity(85)).toBe('mature');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 });
