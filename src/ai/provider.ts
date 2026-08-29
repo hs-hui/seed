@@ -21,7 +21,14 @@ export class LocalProvider implements LLMProvider {
       { item: 'Mobile application', reason: 'Creates a second surface that is not required for the first proof.' },
       { item: 'Advanced integrations', reason: 'Can wait until the primary user loop is useful.' },
     ] });
-    return JSON.stringify({ question: 'Who is the first person this should help, and what is their most painful moment?', maturityDelta: 3 });
+    const question = prompt.includes('problem: \n')
+      ? 'Who is the first person this should help, and what is their most painful moment?'
+      : prompt.includes('openQuestions:') && !prompt.endsWith('openQuestions: ')
+        ? 'Which open question is most important to answer before building?'
+        : prompt.includes('users: \n')
+          ? 'Who should experience the first useful version of this idea?'
+          : 'What is the next concrete outcome a user should get from this idea?';
+    return JSON.stringify({ question, maturityDelta: 3 });
   }
 }
 
