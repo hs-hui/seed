@@ -11,7 +11,7 @@ export async function askGrowthQuestion(store: SeedStore, seed: SeedState, provi
   await addConversation(store, { seedId: seed.id, ...(branchId ? { branchId } : {}), role: 'assistant', type: 'question', content: suggestion.question });
   const existing = seed.openQuestions.find((question) => question.status === 'open' && question.question === suggestion.question && question.branchId === branchId);
   if (!existing) {
-    const question: OpenQuestion = { id: randomUUID(), seedId: seed.id, ...(branchId ? { branchId } : {}), question: suggestion.question,
+    const question: OpenQuestion = { id: randomUUID(), seedId: seed.id, ...(branchId ? { branchId } : {}), question: suggestion.question, ...(suggestion.focus ? { focus: suggestion.focus } : {}),
       importance: 'medium', status: 'open', createdAt: now() };
     await store.save({ ...seed, openQuestions: [...seed.openQuestions, question], updatedAt: now() });
   }
@@ -27,12 +27,14 @@ export async function applyGrowth(store: SeedStore, seed: SeedState, answer: str
   const openQuestions = seed.openQuestions.map((question) => question.question === asked?.content && question.status === 'open'
     ? { ...question, status: 'answered' as const, answer: trimmed, answeredAt: now() } : question);
   const askedText = asked?.content.toLowerCase() ?? '';
+  const askedQuestion = seed.openQuestions.find((question) => question.question === asked?.content && question.status === 'open' && question.branchId === branchId);
+  const focus = askedQuestion?.focus;
   // "사용자" appears in many outcome questions, so only classify a
   // response as a user definition when the question asks who/which person.
-  const asksUser = askedText.includes('who') || /누구|누가|사람|대상/.test(askedText);
-  const asksProblem = askedText.includes('problem') || /문제|어려|고통|힘든/.test(askedText);
-  const asksConstraint = askedText.includes('constraint') || /제약|범위|제한|줄여/.test(askedText);
-  const asksAssumption = askedText.includes('assumption') || /가정|전제|검증/.test(askedText);
+  const asksUser = focus === 'user' || askedText.includes('who') || /누구|누가|대상/.test(askedText);
+  const asksProblem = focus === 'problem' || askedText.includes('problem') || /문제|어려|고통|힘든|답답|불편/.test(askedText);
+  const asksConstraint = focus === 'constraint' || askedText.includes('constraint') || /제약|범위|제한|줄여|남기|첫 버전|처음/.test(askedText);
+  const asksAssumption = focus === 'assumption' || askedText.includes('assumption') || /가정|전제|검증|확인해야/.test(askedText);
   const users = asksUser && !seed.users.includes(trimmed) ? [...seed.users, trimmed.slice(0, 120)] : seed.users;
   const problem = asksProblem && !seed.problem ? trimmed : seed.problem;
   const constraints = asksConstraint && !seed.constraints.includes(trimmed) ? [...seed.constraints, trimmed.slice(0, 160)] : seed.constraints;
@@ -57,5 +59,6 @@ export async function applyGrowth(store: SeedStore, seed: SeedState, answer: str
 /** Growth is ready to pause once the essential story has been answered. */
 export function growthReady(seed: SeedState): boolean {
   const answered = seed.openQuestions.filter((question) => question.status === 'answered').length;
-  return answered >= 3 && Boolean(seed.problem) && seed.users.length > 0 && seed.goals.length > 0 && seed.maturity >= 55;
+  return answered >= 4 && Boolean(seed.problem) && seed.users.length > 0 && seed.goals.length > 0
+    && (seed.constraints.length > 0 || seed.assumptions.length > 0) && seed.maturity >= 58;
 }

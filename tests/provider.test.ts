@@ -57,12 +57,18 @@ describe('AI language handling', () => {
     try {
       const store = new SeedStore(root);
       const seed = await plant(store, '개발자를 돕는 안내 도구');
-      const question = await askGrowthQuestion(store, seed, undefined, undefined, undefined, 'ko');
+      const question = await askGrowthQuestion(store, seed, 'local', undefined, undefined, 'ko');
       const prompted = await store.load();
       expect(question).toContain('아이디어');
-      const result = await applyGrowth(store, prompted, '처음에는 저장소를 처음 보는 개발자가 가장 힘들어합니다.');
-      expect(result.seed.users).toContain('처음에는 저장소를 처음 보는 개발자가 가장 힘들어합니다.');
-      expect(result.seed.problem).toBe('처음에는 저장소를 처음 보는 개발자가 가장 힘들어합니다.');
+      const userAnswer = '처음에는 저장소를 처음 보는 개발자입니다.';
+      const userResult = await applyGrowth(store, prompted, userAnswer);
+      expect(userResult.seed.users).toContain(userAnswer);
+      expect(userResult.seed.problem).toBe('');
+      const problemQuestion = await askGrowthQuestion(store, userResult.seed, 'local', undefined, undefined, 'ko');
+      expect(problemQuestion).toContain('답답');
+      const problemAnswer = '저장소 구조를 처음 파악할 때 가장 힘들어합니다.';
+      const result = await applyGrowth(store, await store.load(), problemAnswer);
+      expect(result.seed.problem).toBe(problemAnswer);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

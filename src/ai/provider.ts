@@ -1,4 +1,4 @@
-import { SeedState, MaturityDimension } from '../domain.js';
+import { GrowthFocus, SeedState, MaturityDimension, growthFocuses } from '../domain.js';
 import { loadConfig, ProviderConfig } from '../storage/store.js';
 import { buildContext } from './context-builder.js';
 import { getOpenAIToken, openAIAuthFilePath } from './openai-oauth.js';
@@ -7,6 +7,7 @@ import { openaiCredentials } from '@openai-oauth/local';
 import { generateText } from 'ai';
 
 export type ProviderLanguage = 'en' | 'ko';
+export const DEFAULT_OPENAI_OAUTH_MODEL = 'gpt-5.4-mini';
 
 export interface LLMProvider {
   readonly id: string;
@@ -46,30 +47,27 @@ export class LocalProvider implements LLMProvider {
     const value = (label: string): string => prompt.match(new RegExp(`(?:^|\\n)${label}:([^\\n]*)`))?.[1]?.trim() ?? '';
     const problem = value('problem'); const users = value('users'); const goals = value('goals');
     const constraints = value('constraints'); const assumptions = value('assumptions');
-    const question = this.language === 'ko'
-      ? !problem
-        ? '이 아이디어가 가장 먼저 도와야 할 사람은 누구이며, 그 사람이 겪는 가장 큰 어려움은 무엇인가요?'
-        : !users
-          ? '이 아이디어의 첫 번째 유용한 버전을 누가 경험해야 하나요?'
-          : !goals
-            ? '사용자가 이 아이디어에서 얻어야 할 다음 구체적인 결과는 무엇인가요?'
-            : !constraints
-              ? '첫 번째 버전에서 반드시 지켜야 할 범위나 제약은 무엇인가요?'
-              : !assumptions
-                ? '이 아이디어가 작동하려면 반드시 참이어야 하는 가정은 무엇인가요?'
-                : '출시 전에 가장 확실하게 검증하고 싶은 것은 무엇인가요?'
-      : !problem
-        ? 'Who is the first person this should help, and what is their most painful moment?'
-        : !users
-          ? 'Who should experience the first useful version of this idea?'
-          : !goals
-            ? 'What is the next concrete outcome a user should get from this idea?'
-            : !constraints
-              ? 'What scope or constraint must the first version respect?'
-              : !assumptions
-                ? 'What assumption must be true for this idea to work?'
-                : 'What would you most want to validate before launch?';
-    return JSON.stringify({ question, maturityDelta: 3 });
+    let focus: GrowthFocus; let question: string;
+    if (!users) {
+      focus = 'user';
+      question = this.language === 'ko' ? '이 아이디어를 가장 먼저 써봤으면 하는 사람은 누구예요?' : 'Who would you most like to try this idea first?';
+    } else if (!problem) {
+      focus = 'problem';
+      question = this.language === 'ko' ? '그 사람이 가장 답답해하는 순간은 언제예요?' : 'When does that person feel the most stuck?';
+    } else if (!goals) {
+      focus = 'goal';
+      question = this.language === 'ko' ? '그 사람이 써보고 나서 “도움이 됐다”라고 느끼려면, 무엇이 달라져야 할까요?' : 'What would need to change for that person to say, “That actually helped”?';
+    } else if (!constraints) {
+      focus = 'constraint';
+      question = this.language === 'ko' ? '처음부터 다 만들 필요는 없어요. 첫 버전에서 꼭 지키고 싶은 범위나 제약은 무엇일까요?' : 'We do not need to build everything at once. What should the first version stay focused on?';
+    } else if (!assumptions) {
+      focus = 'assumption';
+      question = this.language === 'ko' ? '이 아이디어가 잘 되려면 우리가 먼저 확인해야 할 가정은 무엇일까요?' : 'What assumption should we check first for this idea to work?';
+    } else {
+      focus = 'validation';
+      question = this.language === 'ko' ? '이걸 실제로 써본 사람에게 가장 먼저 확인하고 싶은 건 무엇일까요?' : 'What is the first thing you would want to learn from someone using it?';
+    }
+    return JSON.stringify({ question, maturityDelta: 3, focus });
   }
 }
 
@@ -198,13 +196,17 @@ export async function getProvider(id?: string, model?: string, language: Provide
     ...(selected.type === 'openai' && process.env.SEED_OPENAI_BASE_URL ? { baseUrl: process.env.SEED_OPENAI_BASE_URL } : {}),
     ...(model ? { defaultModel: model } : selected.type === 'openai' && process.env.SEED_OPENAI_MODEL ? { defaultModel: process.env.SEED_OPENAI_MODEL } : {}),
   };
+  // ChatGPT-account OAuth does not expose every Codex model. Older Seed
+  // versions suggested gpt-5.3-codex, which the OAuth endpoint rejects with
+  // HTTP 400; transparently move that legacy default to a supported model.
+  if (useOAuth && resolved.defaultModel === 'gpt-5.3-codex') resolved.defaultModel = DEFAULT_OPENAI_OAUTH_MODEL;
   if (useOAuth) {
     return key ? new OpenAIOAuthProvider(resolved, language) : new LocalProvider(language);
   }
   return key ? new OpenAICompatibleProvider(resolved, key, language) : new LocalProvider(language);
 }
 
-export type GrowthSuggestion = { question: string; maturityDelta: number };
+export type GrowthSuggestion = { question: string; maturityDelta: number; focus?: GrowthFocus };
 function parseJsonObject(response: string): Record<string, unknown> | undefined {
   const trimmed = response.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   try { return JSON.parse(trimmed) as Record<string, unknown>; } catch { /* try a conversational response */ }
@@ -217,18 +219,20 @@ export async function nextQuestion(seed: SeedState, providerId?: string, model?:
   const provider = await getProvider(providerId, model, language); let response = '';
   try {
     const context = buildContext(seed, 'grow');
-    response = await provider.ask(`GROW_QUESTION\ncoreIdea: ${context.coreIdea}\noriginalIdea: ${seed.originalIdea}\nproblem: ${seed.problem}\nusers: ${seed.users.join(', ')}\ngoals: ${seed.goals.join(' | ')}\nconstraints: ${seed.constraints.join(' | ')}\nassumptions: ${seed.assumptions.join(' | ')}\nconfirmedDecisions: ${context.importantDecisions.map((decision) => decision.decision).join(' | ')}\nopenQuestions: ${context.openQuestions.map((question) => question.question).join(' | ')}\nReturn JSON only: {"question":"one focused question","maturityDelta":1-8}`);
+    response = await provider.ask(`GROW_QUESTION\ncoreIdea: ${context.coreIdea}\noriginalIdea: ${seed.originalIdea}\nproblem: ${seed.problem}\nusers: ${seed.users.join(', ')}\ngoals: ${seed.goals.join(' | ')}\nconstraints: ${seed.constraints.join(' | ')}\nassumptions: ${seed.assumptions.join(' | ')}\nconfirmedDecisions: ${context.importantDecisions.map((decision) => decision.decision).join(' | ')}\nopenQuestions: ${context.openQuestions.map((question) => question.question).join(' | ')}\nAsk exactly one next question about the most useful missing focus. Acknowledge the context naturally, avoid survey wording, avoid repeating answered points, and keep it concise. Use the user's language and do not make decisions for them.\nReturn JSON only: {"question":"one focused question","maturityDelta":1-8,"focus":"user|problem|goal|constraint|assumption|validation"}`);
   } catch {
     response = await new LocalProvider(language).ask(`GROW_QUESTION\ncoreIdea: ${seed.coreIdea}\noriginalIdea: ${seed.originalIdea}\nproblem: ${seed.problem}\nusers: ${seed.users.join(', ')}\ngoals: ${seed.goals.join(' | ')}\nconstraints: ${seed.constraints.join(' | ')}\nassumptions: ${seed.assumptions.join(' | ')}\nopenQuestions: `);
   }
   const parsed = parseJsonObject(response);
   if (typeof parsed?.question === 'string' && parsed.question.trim()) {
     const delta = typeof parsed.maturityDelta === 'number' && Number.isFinite(parsed.maturityDelta) ? parsed.maturityDelta : 3;
-    return { question: parsed.question.trim(), maturityDelta: Math.max(1, Math.min(8, Math.round(delta))) };
+    const focus = typeof parsed.focus === 'string' && growthFocuses.includes(parsed.focus as GrowthFocus) ? parsed.focus as GrowthFocus : undefined;
+    return { question: parsed.question.trim(), maturityDelta: Math.max(1, Math.min(8, Math.round(delta))), ...(focus ? { focus } : {}) };
   }
   const fallback = await new LocalProvider(language).ask(`GROW_QUESTION\ncoreIdea: ${seed.coreIdea}\nproblem: ${seed.problem}\nusers: ${seed.users.join(', ')}\nopenQuestions: `);
   const local = parseJsonObject(fallback);
-  return { question: typeof local?.question === 'string' ? local.question : (language === 'ko' ? '이 아이디어를 다음 단계로 발전시키려면 무엇을 먼저 확인해야 하나요?' : 'What should we verify first to move this idea forward?'), maturityDelta: 3 };
+  const focus = typeof local?.focus === 'string' && growthFocuses.includes(local.focus as GrowthFocus) ? local.focus as GrowthFocus : undefined;
+  return { question: typeof local?.question === 'string' ? local.question : (language === 'ko' ? '이 아이디어를 다음 단계로 발전시키려면 무엇을 먼저 확인해야 하나요?' : 'What should we verify first to move this idea forward?'), maturityDelta: 3, ...(focus ? { focus } : {}) };
 }
 
 export async function suggestBranches(seed: SeedState, providerId?: string, model?: string, language: ProviderLanguage = 'en'): Promise<Array<{ name: string; summary: string }>> {

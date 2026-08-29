@@ -9,7 +9,7 @@ import { plant, addEvent } from '../core/seed-manager.js';
 import { askGrowthQuestion, applyGrowth, growthReady } from '../core/growth.js';
 import { branchSuggestions, createBranch, pruneItem, pruneSuggestions } from '../core/branch.js';
 import { calculateMaturity, clearItems, uncertainItems, exploreItems, statusForMaturity } from '../core/maturity.js';
-import { dimensionsFor } from '../ai/provider.js';
+import { DEFAULT_OPENAI_OAUTH_MODEL, dimensionsFor } from '../ai/provider.js';
 import { providerKey } from '../ai/provider.js';
 import { loginOpenAI, getOpenAIToken } from '../ai/openai-oauth.js';
 import { harvest, harvestTitle } from '../core/harvest.js';
@@ -60,6 +60,18 @@ function maxGrowthTurns(): number {
   return Number.isFinite(configured) && configured > 0 ? Math.min(50, Math.floor(configured)) : 12;
 }
 
+function printGrowthQuestion(question: string, firstTurn: boolean): void {
+  console.log();
+  console.log(chalk.green(`🌱 ${t(firstTurn ? 'grow.opening' : 'grow.followUp')}`));
+  console.log(question);
+  console.log(chalk.dim(t('grow.finishHint')));
+}
+
+async function promptGrowthAnswer(question: string, firstTurn: boolean): Promise<string> {
+  printGrowthQuestion(question, firstTurn);
+  return input({ message: t('grow.answerPrompt') });
+}
+
 async function plantCommand(idea: string | undefined, options: CommonOptions): Promise<void> {
   const store = await openStore();
   const hasSeed = await store.hasSeed();
@@ -85,7 +97,7 @@ async function plantCommand(idea: string | undefined, options: CommonOptions): P
     if (!process.stdin.isTTY) { console.log(`\n${question}`); return; }
     let turns = 0;
     while (!growthReady(seed) && turns < maxGrowthTurns()) {
-      const answer = await input({ message: `${question}\n${t('grow.finishHint')}` });
+      const answer = await promptGrowthAnswer(question, turns === 0);
       if (!answer.trim()) break;
       const result = await applyGrowth(store, seed, answer, options.provider);
       seed = result.seed;
@@ -138,7 +150,7 @@ grow.action(async (options: CommonOptions & { answer?: string; interactive?: boo
   while (!growthReady(seed) && turns < maxGrowthTurns()) {
     const question = await askGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage());
     seed = await store.load();
-    answer = await input({ message: `${question}\n${t('grow.finishHint')}` });
+    answer = await promptGrowthAnswer(question, turns === 0);
     if (!answer.trim()) break;
     const result = await applyGrowth(store, seed, answer, options.provider, branchId);
     seed = result.seed;
@@ -234,7 +246,7 @@ async function configWizard(): Promise<void> {
   if (selected === 'openai-oauth') {
     console.log(t('config.oauthExperimental'));
     try {
-      const oauthModel = await input({ message: t('config.model'), default: process.env.SEED_OPENAI_OAUTH_MODEL ?? 'gpt-5.3-codex' });
+      const oauthModel = await input({ message: t('config.model'), default: process.env.SEED_OPENAI_OAUTH_MODEL ?? DEFAULT_OPENAI_OAUTH_MODEL });
       await loginOpenAI();
       const existing = current.providers.find((provider) => provider.id === 'openai');
       current.providers = [...current.providers.filter((entry) => entry.id !== 'openai'), {
@@ -312,7 +324,7 @@ config.command('test').description('Check the active provider').action(async () 
 config.command('login').argument('<provider>').description('Connect an account').action(async (provider: string) => run(async () => {
   if (provider !== 'openai') throw new Error('Only OpenAI account login is supported.');
   await loginOpenAI(); const value = await loadConfig(); const existing = value.providers.find((entry) => entry.id === 'openai');
-  const openai = existing ?? { id: 'openai', name: 'openai', type: 'openai' as const, defaultModel: process.env.SEED_OPENAI_OAUTH_MODEL ?? 'gpt-5.3-codex', enabled: true };
+  const openai = existing ?? { id: 'openai', name: 'openai', type: 'openai' as const, defaultModel: process.env.SEED_OPENAI_OAUTH_MODEL ?? DEFAULT_OPENAI_OAUTH_MODEL, enabled: true };
   value.providers = [...value.providers.filter((entry) => entry.id !== 'openai'), { ...openai, connectionMode: 'oauth' as const }]; value.activeProvider = 'openai'; await saveConfig(value); console.log(t('config.saved'));
 }));
 config.command('remove').argument('<provider>').description('Remove a provider').action(async (provider: string) => run(async () => { const value = await loadConfig(); value.providers = value.providers.filter((p) => p.id !== provider); if (value.activeProvider === provider) value.activeProvider = 'local'; await saveConfig(value); console.log(t('config.saved')); }));

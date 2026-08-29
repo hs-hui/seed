@@ -18,7 +18,7 @@ describe('Seed MVP flow', () => {
       const store = new SeedStore(root);
       const seed = await plant(store, '  A repository guide for new developers  ');
       expect(seed.originalIdea).toBe('A repository guide for new developers');
-      const question = await askGrowthQuestion(store, seed);
+      const question = await askGrowthQuestion(store, seed, 'local');
       const prompted = await store.load();
       expect(prompted.openQuestions.some((entry) => entry.question === question && entry.status === 'open')).toBe(true);
       const result = await applyGrowth(store, prompted, 'Help a developer find the right starting point.');
@@ -74,7 +74,7 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-branch-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'Explore a developer workflow');
-      const suggestions = await branchSuggestions(seed); expect(suggestions.length).toBeGreaterThanOrEqual(2); expect(suggestions.length).toBeLessThanOrEqual(4);
+      const suggestions = await branchSuggestions(seed, 'local'); expect(suggestions.length).toBeGreaterThanOrEqual(2); expect(suggestions.length).toBeLessThanOrEqual(4);
       let current = await createBranch(store, seed, suggestions[0]!.name, suggestions[0]!.summary);
       let latest = await store.load();
       for (let index = 1; index < 5; index += 1) { const suggestion = suggestions[index % suggestions.length]!; await createBranch(store, latest, `${suggestion.name}-${index}`, suggestion.summary); latest = await store.load(); }

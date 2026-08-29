@@ -14,8 +14,11 @@ export type Decision = {
   id: string; seedId: string; branchId?: string; decision: string; reason: string;
   source: string; confirmedByUser: boolean; createdAt: string;
 };
+export const growthFocuses = ['user', 'problem', 'goal', 'constraint', 'assumption', 'validation'] as const;
+export type GrowthFocus = (typeof growthFocuses)[number];
 export type OpenQuestion = {
   id: string; seedId: string; branchId?: string; question: string;
+  focus?: GrowthFocus;
   importance: 'low' | 'medium' | 'high'; status: 'open' | 'answered' | 'cancelled';
   answer?: string; answeredAt?: string; createdAt: string;
 };
@@ -54,6 +57,7 @@ const decisionSchema = z.object({
 });
 const questionSchema = z.object({
   id: z.string(), seedId: z.string(), branchId: z.string().optional(), question: z.string(),
+  focus: z.enum(growthFocuses).optional(),
   importance: z.enum(['low', 'medium', 'high']), status: z.enum(['open', 'answered', 'cancelled']),
   answer: z.string().optional(), answeredAt: z.string().optional(), createdAt: z.string(),
 });
