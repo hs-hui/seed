@@ -58,9 +58,16 @@ function print(value: unknown, json = false): void { if (json) console.log(JSON.
 
 async function plantCommand(idea: string | undefined, options: CommonOptions): Promise<void> {
   const store = await openStore();
-  if (await store.hasSeed()) throw new Error('seed-exists');
+  const hasSeed = await store.hasSeed();
+  // `--setup` is also the recovery path for an existing project. Run the
+  // wizard before the seed guard and stop after saving configuration there.
+  if (options.setup && process.stdin.isTTY && !options.json) {
+    await firstRunSetup(options.lang);
+    if (hasSeed) return;
+  }
+  if (hasSeed) throw new Error('seed-exists');
   const config = await loadConfig();
-  if (process.stdin.isTTY && !options.json && (options.setup || config.setupCompleted !== true)) await firstRunSetup(options.lang);
+  if (process.stdin.isTTY && !options.json && config.setupCompleted !== true) await firstRunSetup(options.lang);
   if (!idea) {
     if (!process.stdin.isTTY) throw new Error('An idea is required in non-interactive mode.');
     console.log(`${t('welcome.title')}\n${t('welcome.subtitle')}`); idea = (await input({ message: t('welcome.prompt') })).trim();
