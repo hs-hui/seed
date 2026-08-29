@@ -46,7 +46,7 @@ npx --yes --package @seed-cli/seed seed
 
 Bare `npx seed` only resolves this CLI when `@seed-cli/seed` is already installed locally (or linked); otherwise npm resolves the unrelated unscoped `seed` package.
 
-Use `--lang ko` or `SEED_LANG=ko` for Korean UI. Configure an API key with `seed config set provider openai` and `OPENAI_API_KEY`, or keep using the local fallback while exploring the workflow.
+Use `--lang ko` or `SEED_LANG=ko` for Korean UI. Configure an API key first (for example `OPENAI_API_KEY=...`) and then run `seed config set provider openai`, or keep using the local fallback while exploring the workflow.
 
 ## MVP commands
 

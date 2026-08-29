@@ -44,6 +44,7 @@
   "error.noSeed": "이 위치에서 씨앗을 찾지 못했습니다. 먼저 `seed \"아이디어\"`를 실행하세요.",
   "error.seedExists": "이 위치에 이미 씨앗이 있습니다. `seed grow`로 이어가거나 새 디렉터리에서 시작하세요.",
   "error.ideaRequired": "비어 있지 않은 아이디어를 입력하세요.",
+  "error.oauthClientId": "OpenAI 계정 로그인을 시작하기 전에 SEED_OPENAI_CLIENT_ID를 설정하세요.",
   "error.invalidProvider": "프로바이더 `{provider}`가 설정되지 않았습니다.",
   "error.generic": "문제가 발생했습니다: {message}"
   ,"help.description": "🌱 아이디어를 심고, 중요한 것을 키우세요.",

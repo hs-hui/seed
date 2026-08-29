@@ -65,7 +65,8 @@ describe('Seed MVP flow', () => {
       const { readFile } = await import('node:fs/promises');
       const prd = await readFile(files.find((file) => file.endsWith('prd-v1.md'))!, 'utf8');
       const trd = await readFile(files.find((file) => file.endsWith('trd-v1.md'))!, 'utf8');
-      expect(prd).toContain('## 13. Open Questions'); expect(trd).toContain('## 21. Future Scalability');
+      for (const section of ['## 1.', '## 2.', '## 3.', '## 4.', '## 5.', '## 6.', '## 7.', '## 8.', '## 9.', '## 10.', '## 11.', '## 12.', '## 13.']) expect(prd).toContain(section);
+      for (const section of ['## 1.', '## 2.', '## 3.', '## 4.', '## 5.', '## 6.', '## 7.', '## 8.', '## 9.', '## 10.', '## 11.', '## 12.', '## 13.', '## 14.', '## 15.', '## 16.', '## 17.', '## 18.', '## 19.', '## 20.', '## 21.']) expect(trd).toContain(section);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 

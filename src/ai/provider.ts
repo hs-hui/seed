@@ -1,6 +1,7 @@
 import { SeedState, Branch, MaturityDimension } from '../domain.js';
 import { loadConfig, ProviderConfig } from '../storage/store.js';
 import { buildContext } from './context-builder.js';
+import { loadOpenAITokens } from './openai-oauth.js';
 
 export interface LLMProvider {
   readonly id: string;
@@ -68,7 +69,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
   }
 }
 
-function keyFor(provider: ProviderConfig): string | undefined {
+export function providerKey(provider: ProviderConfig): string | undefined {
   if (provider.type === 'openai') return process.env.SEED_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY;
   if (provider.type === 'gemini') return process.env.SEED_GEMINI_API_KEY;
   if (provider.type === 'anthropic') return process.env.SEED_ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY;
@@ -78,7 +79,7 @@ function keyFor(provider: ProviderConfig): string | undefined {
 export async function getProvider(id?: string, model?: string): Promise<LLMProvider> {
   const config = await loadConfig(); const selected = config.providers.find((p) => p.id === (id ?? config.activeProvider));
   if (!selected || selected.id === 'local') return new LocalProvider();
-  const key = keyFor(selected);
+  const key = providerKey(selected) ?? (selected.type === 'openai' && selected.connectionMode === 'oauth' ? (await loadOpenAITokens())?.access_token : undefined);
   const resolved = model ? { ...selected, defaultModel: model } : selected;
   return key ? new OpenAICompatibleProvider(resolved, key) : new LocalProvider();
 }

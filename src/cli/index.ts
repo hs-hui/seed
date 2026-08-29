@@ -10,6 +10,8 @@ import { askGrowthQuestion, applyGrowth } from '../core/growth.js';
 import { branchSuggestions, createBranch, pruneItem, pruneSuggestions } from '../core/branch.js';
 import { calculateMaturity, clearItems, uncertainItems, exploreItems, statusForMaturity } from '../core/maturity.js';
 import { dimensionsFor } from '../ai/provider.js';
+import { providerKey } from '../ai/provider.js';
+import { loginOpenAI } from '../ai/openai-oauth.js';
 import { harvest, harvestTitle } from '../core/harvest.js';
 
 type CommonOptions = { lang?: string; json?: boolean; provider?: string; model?: string; branch?: string };
@@ -34,6 +36,7 @@ function run(action: () => Promise<void>, options: CommonOptions = {}): Promise<
     if (message === 'no-seed') console.error(t('error.noSeed'));
     else if (message === 'seed-exists') console.error(t('error.seedExists'));
     else if (message === 'idea-required') console.error(t('error.ideaRequired'));
+    else if (message === 'oauth-client-id-required') console.error(t('error.oauthClientId'));
     else if (message === 'too-many-branches') console.error(t('branch.tooMany'));
     else console.error(t('error.generic', { message }));
     process.exitCode = 1;
@@ -177,6 +180,8 @@ config.command('set').argument('<key>').argument('<value>').description('Set pro
       const known = valueArg === 'openai' ? { type: 'openai' as const, model: 'gpt-4o-mini' } : valueArg === 'gemini' ? { type: 'gemini' as const, model: 'gemini-2.5-flash' } : valueArg === 'anthropic' ? { type: 'anthropic' as const, model: 'claude-3-5-sonnet-latest' } : { type: 'custom' as const, model: 'default' };
       value.providers.push({ id: valueArg, name: valueArg, type: known.type, defaultModel: known.model, enabled: true, ...(known.type === 'openai' ? { connectionMode: 'api-key' as const } : {}) });
     }
+    const configured = value.providers.find((provider) => provider.id === valueArg);
+    if (configured && configured.id !== 'local' && !providerKey(configured)) { console.log(t('config.emptyKey')); return; }
     value.activeProvider = valueArg; await saveConfig(value); console.log(t('config.saved')); return;
   }
   if (key === 'model') { const active = value.providers.find((p) => p.id === value.activeProvider); if (!active) throw new Error(t('error.invalidProvider', { provider: value.activeProvider })); active.defaultModel = valueArg; await saveConfig(value); console.log(t('config.saved')); return; }
@@ -192,9 +197,15 @@ config.command('unset').argument('<key>').description('Remove a setting').action
 config.command('test').description('Check the active provider').action(async () => run(async () => {
   const value = await loadConfig(); const active = value.providers.find((p) => p.id === value.activeProvider);
   if (!active || active.id === 'local') { console.log(t('config.localReady')); return; }
-  const key = active.type === 'openai' ? (process.env.SEED_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY) : active.type === 'gemini' ? process.env.SEED_GEMINI_API_KEY : active.type === 'anthropic' ? (process.env.SEED_ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY) : process.env.SEED_API_KEY;
+  const key = providerKey(active) ?? (active.type === 'openai' && active.connectionMode === 'oauth' ? (await import('../ai/openai-oauth.js')).loadOpenAITokens().then((tokens) => tokens?.access_token) : undefined);
   if (!key) { console.log(t('config.emptyKey')); process.exitCode = 1; return; }
   console.log(t('config.keyConfigured', { provider: active.id }));
+}));
+config.command('login').argument('<provider>').description('Connect an account').action(async (provider: string) => run(async () => {
+  if (provider !== 'openai') throw new Error('Only OpenAI account login is supported.');
+  await loginOpenAI(); const value = await loadConfig(); const existing = value.providers.find((entry) => entry.id === 'openai');
+  const openai = existing ?? { id: 'openai', name: 'openai', type: 'openai' as const, defaultModel: 'gpt-4o-mini', enabled: true };
+  value.providers = [...value.providers.filter((entry) => entry.id !== 'openai'), { ...openai, connectionMode: 'oauth' as const }]; value.activeProvider = 'openai'; await saveConfig(value); console.log(t('config.saved'));
 }));
 config.command('remove').argument('<provider>').description('Remove a provider').action(async (provider: string) => run(async () => { const value = await loadConfig(); value.providers = value.providers.filter((p) => p.id !== provider); if (value.activeProvider === provider) value.activeProvider = 'local'; await saveConfig(value); console.log(t('config.saved')); }));
 
