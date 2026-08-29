@@ -2,6 +2,14 @@
 
 Plant an idea. Grow what matters.
 
+<p align="center">
+  <img src="./assets/seed-overview.png" alt="Seed idea growth workflow: seed, grow, branch, bloom, and harvest" width="1200" />
+</p>
+
+Seed turns a vague thought into a focused, buildable direction through a gentle CLI workflow:
+
+**Seed → Grow → Branch → Prune → Bloom → Harvest**
+
 Seed is a local-first CLI for turning an early idea into a clearer, testable project definition. It keeps state in `.seed/`, never edits your source files, and can use a configured OpenAI-compatible provider or a deterministic local fallback.
 
 ## Quick start
