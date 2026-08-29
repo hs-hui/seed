@@ -197,10 +197,12 @@ async function configWizard(): Promise<void> {
   if (selected === 'openai-oauth') {
     console.log(t('config.oauthExperimental'));
     try {
+      const oauthModel = await input({ message: t('config.model'), default: process.env.SEED_OPENAI_OAUTH_MODEL ?? 'gpt-5.3-codex' });
       await loginOpenAI();
       const existing = current.providers.find((provider) => provider.id === 'openai');
       current.providers = [...current.providers.filter((entry) => entry.id !== 'openai'), {
-        ...(existing ?? { id: 'openai', name: 'openai', type: 'openai' as const, defaultModel: 'gpt-4o-mini', enabled: true }),
+        ...(existing ?? { id: 'openai', name: 'openai', type: 'openai' as const, defaultModel: oauthModel, enabled: true }),
+        defaultModel: oauthModel,
         connectionMode: 'oauth' as const,
       }];
       current.activeProvider = 'openai';
@@ -244,9 +246,13 @@ config.command('set').argument('<key>').argument('<value>').description('Set pro
       value.providers.push({ id: valueArg, name: valueArg, type: known.type, defaultModel: known.model, enabled: true, ...(known.type === 'openai' ? { connectionMode: 'api-key' as const } : {}) });
     }
     const configured = value.providers.find((provider) => provider.id === valueArg);
-    const credential = configured && (providerKey(configured) ?? (configured.type === 'openai' && configured.connectionMode === 'oauth' ? await getOpenAIToken() : undefined));
+    const apiKey = configured ? providerKey(configured) : undefined;
+    const credential = configured && (apiKey ?? (configured.type === 'openai' && configured.connectionMode === 'oauth' ? await getOpenAIToken() : undefined));
     if (configured && configured.id !== 'local' && !credential) { console.log(t('config.emptyKey')); return; }
-    if (configured) configured.enabled = true;
+    if (configured) {
+      configured.enabled = true;
+      if (configured.type === 'openai' && apiKey) configured.connectionMode = 'api-key';
+    }
     value.activeProvider = valueArg; await saveConfig(value); console.log(t('config.saved')); return;
   }
   if (key === 'model') { const active = value.providers.find((p) => p.id === value.activeProvider); if (!active) throw new Error(t('error.invalidProvider', { provider: value.activeProvider })); active.defaultModel = valueArg; await saveConfig(value); console.log(t('config.saved')); return; }
@@ -269,7 +275,7 @@ config.command('test').description('Check the active provider').action(async () 
 config.command('login').argument('<provider>').description('Connect an account').action(async (provider: string) => run(async () => {
   if (provider !== 'openai') throw new Error('Only OpenAI account login is supported.');
   await loginOpenAI(); const value = await loadConfig(); const existing = value.providers.find((entry) => entry.id === 'openai');
-  const openai = existing ?? { id: 'openai', name: 'openai', type: 'openai' as const, defaultModel: 'gpt-4o-mini', enabled: true };
+  const openai = existing ?? { id: 'openai', name: 'openai', type: 'openai' as const, defaultModel: process.env.SEED_OPENAI_OAUTH_MODEL ?? 'gpt-5.3-codex', enabled: true };
   value.providers = [...value.providers.filter((entry) => entry.id !== 'openai'), { ...openai, connectionMode: 'oauth' as const }]; value.activeProvider = 'openai'; await saveConfig(value); console.log(t('config.saved'));
 }));
 config.command('remove').argument('<provider>').description('Remove a provider').action(async (provider: string) => run(async () => { const value = await loadConfig(); value.providers = value.providers.filter((p) => p.id !== provider); if (value.activeProvider === provider) value.activeProvider = 'local'; await saveConfig(value); console.log(t('config.saved')); }));

@@ -72,11 +72,12 @@ Run `seed config test` to check that the active provider has a usable credential
 OpenAI account login is also exposed for the PRD flow:
 
 ```bash
-SEED_OPENAI_CLIENT_ID=...
 seed config login openai
 ```
 
-This Device Flow is marked experimental and requires a client id issued for the application. The supported, documented OpenAI API path is an API key; a ChatGPT subscription does not automatically include API usage or billing. After login, the access token is stored under the user Seed directory with restrictive file permissions and refreshed when a refresh token is available.
+This opens the local browser OAuth flow provided by `openai-oauth` and stores credentials in `~/.codex/auth.json` (override with `SEED_OPENAI_AUTH_FILE`). It does not require you to create a Client ID. You can also run `npx openai-oauth login` directly. Choose a Codex model available to your account, for example `gpt-5.3-codex`.
+
+The supported, documented OpenAI API path is still an API key; a ChatGPT subscription and API billing are separate.
 
 ## MVP commands
 

@@ -47,7 +47,7 @@
   "config.provider.gemini": "Google Gemini — API key",
   "config.provider.anthropic": "Anthropic Claude — API key",
   "config.provider.custom": "Custom OpenAI-compatible provider",
-  "config.oauthExperimental": "OpenAI account login is experimental and requires SEED_OPENAI_CLIENT_ID.",
+  "config.oauthExperimental": "OpenAI account login opens a browser and uses the local Codex auth file.",
   "config.oauthFailed": "OpenAI account login was not completed: {message}\nKeeping the local fallback.",
   "setup.language": "Choose your CLI language",
   "setup.language.en": "English (default)",

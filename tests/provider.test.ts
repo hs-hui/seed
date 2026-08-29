@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { LocalProvider, OpenAICompatibleProvider } from '../src/ai/provider.js';
 import { askGrowthQuestion, applyGrowth } from '../src/core/growth.js';
 import { plant } from '../src/core/seed-manager.js';
 import { SeedStore } from '../src/storage/store.js';
+import { getOpenAIToken } from '../src/ai/openai-oauth.js';
 
 describe('AI language handling', () => {
   it('returns Korean local fallback suggestions when Korean is selected', async () => {
@@ -28,6 +29,21 @@ describe('AI language handling', () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('reads the local Codex auth file used by openai-oauth', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'seed-auth-'));
+    const authFile = path.join(root, 'auth.json');
+    const previous = process.env.SEED_OPENAI_AUTH_FILE;
+    await writeFile(authFile, JSON.stringify({ auth_mode: 'chatgpt', tokens: { access_token: 'oauth-token', account_id: 'account-1' } }));
+    process.env.SEED_OPENAI_AUTH_FILE = authFile;
+    try {
+      expect(await getOpenAIToken()).toBe('oauth-token');
+    } finally {
+      if (previous === undefined) delete process.env.SEED_OPENAI_AUTH_FILE;
+      else process.env.SEED_OPENAI_AUTH_FILE = previous;
+      await rm(root, { recursive: true, force: true });
     }
   });
 

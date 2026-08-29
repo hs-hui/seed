@@ -2,6 +2,9 @@ import { SeedState, MaturityDimension } from '../domain.js';
 import { loadConfig, ProviderConfig } from '../storage/store.js';
 import { buildContext } from './context-builder.js';
 import { getOpenAIToken } from './openai-oauth.js';
+import { createOpenAIOAuth } from '@openai-oauth/ai-sdk';
+import { openaiCredentials } from '@openai-oauth/local';
+import { generateText } from 'ai';
 
 export type ProviderLanguage = 'en' | 'ko';
 
@@ -147,6 +150,24 @@ export class OpenAICompatibleProvider implements LLMProvider {
   }
 }
 
+/** OpenAI account/Codex access through the local auth file and AI SDK adapter. */
+export class OpenAIOAuthProvider implements LLMProvider {
+  readonly id = 'openai';
+  private readonly client: ReturnType<typeof createOpenAIOAuth>;
+  constructor(public readonly config: ProviderConfig, private readonly language: ProviderLanguage = 'en') {
+    this.client = createOpenAIOAuth(openaiCredentials({
+      ...(process.env.SEED_OPENAI_AUTH_FILE ? { authFilePath: process.env.SEED_OPENAI_AUTH_FILE } : {}),
+      ensureFresh: true,
+      instructions: providerInstructions(language),
+    }));
+  }
+  get model(): string { return this.config.defaultModel; }
+  async ask(prompt: string): Promise<string> {
+    const result = await generateText({ model: this.client(this.config.defaultModel), prompt });
+    return result.text;
+  }
+}
+
 export function providerKey(provider: ProviderConfig): string | undefined {
   if (provider.type === 'openai') return process.env.SEED_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY;
   if (provider.type === 'gemini') return process.env.SEED_GEMINI_API_KEY ?? process.env.GEMINI_API_KEY;
@@ -158,12 +179,17 @@ export async function getProvider(id?: string, model?: string, language: Provide
   const config = await loadConfig();
   const selected = config.providers.find((provider) => provider.id === (id ?? config.activeProvider));
   if (!selected || selected.id === 'local') return new LocalProvider(language);
-  const key = providerKey(selected) ?? (selected.type === 'openai' && selected.connectionMode === 'oauth' ? await getOpenAIToken() : undefined);
+  const apiKey = providerKey(selected);
+  const useOAuth = selected.type === 'openai' && selected.connectionMode === 'oauth' && !apiKey;
+  const key = apiKey ?? (useOAuth ? await getOpenAIToken() : undefined);
   const resolved = {
     ...selected,
     ...(selected.type === 'openai' && process.env.SEED_OPENAI_BASE_URL ? { baseUrl: process.env.SEED_OPENAI_BASE_URL } : {}),
     ...(model ? { defaultModel: model } : selected.type === 'openai' && process.env.SEED_OPENAI_MODEL ? { defaultModel: process.env.SEED_OPENAI_MODEL } : {}),
   };
+  if (useOAuth) {
+    return key ? new OpenAIOAuthProvider(resolved, language) : new LocalProvider(language);
+  }
   return key ? new OpenAICompatibleProvider(resolved, key, language) : new LocalProvider(language);
 }
 
