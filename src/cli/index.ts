@@ -4,7 +4,7 @@ import { input, select } from '@inquirer/prompts';
 import chalk from 'chalk';
 import { Branch, HarvestType, SeedState } from '../domain.js';
 import { initializeLanguage, t, currentLanguage, setLanguage } from '../i18n/index.js';
-import { openStore, SeedStore, loadConfig, saveConfig } from '../storage/store.js';
+import { openStore, SeedStore, loadConfig, saveConfig, hasGlobalConfig } from '../storage/store.js';
 import { plant, addEvent } from '../core/seed-manager.js';
 import { askGrowthQuestion, applyGrowth } from '../core/growth.js';
 import { branchSuggestions, createBranch, pruneItem, pruneSuggestions } from '../core/branch.js';
@@ -51,6 +51,7 @@ function print(value: unknown, json = false): void { if (json) console.log(JSON.
 async function plantCommand(idea: string | undefined, options: CommonOptions): Promise<void> {
   const store = await openStore();
   if (await store.hasSeed()) throw new Error('seed-exists');
+  if (process.stdin.isTTY && !options.json && !(await hasGlobalConfig())) await firstRunSetup(options.lang);
   if (!idea) {
     if (!process.stdin.isTTY) throw new Error('An idea is required in non-interactive mode.');
     console.log(`${t('welcome.title')}\n${t('welcome.subtitle')}`); idea = (await input({ message: t('welcome.prompt') })).trim();
@@ -62,6 +63,21 @@ async function plantCommand(idea: string | undefined, options: CommonOptions): P
     console.log(`${t('plant.created')}\n${t('plant.growNext')}`);
     console.log(`\n${question}`);
   }
+}
+
+async function firstRunSetup(explicitLanguage?: string): Promise<void> {
+  const forcedLanguage = explicitLanguage === 'ko' || explicitLanguage === 'en' ? explicitLanguage : process.env.SEED_LANG;
+  const language = forcedLanguage === 'ko' || forcedLanguage === 'en'
+    ? forcedLanguage
+    : await select({ message: t('setup.language'), choices: [
+      { name: t('setup.language.en', {}, 'en'), value: 'en' },
+      { name: t('setup.language.ko', {}, 'en'), value: 'ko' },
+    ] });
+  setLanguage(language);
+  await configWizard();
+  const config = await loadConfig();
+  console.log(t('setup.complete'));
+  if (config.activeProvider === 'local') console.log(t('setup.local'));
 }
 
 const grow = addCommon(program.command('grow').description(t('help.grow'))).option('--answer <text>', 'Non-interactive answer').option('--no-interactive', 'Do not prompt for an answer');
@@ -151,6 +167,7 @@ harvestCommand.action(async (type: HarvestType | 'all' | undefined, options: Com
 const config = program.command('config').description(t('help.config')).option('--lang <lang>', 'UI language (en or ko)');
 async function configWizard(): Promise<void> {
   const current = await loadConfig();
+  current.lang = currentLanguage();
   const selected = await select({ message: t('config.chooseProvider'), choices: [
     { name: 'Local fallback — no API key', value: 'local' },
     { name: 'OpenAI — API key', value: 'openai' },
@@ -166,7 +183,7 @@ async function configWizard(): Promise<void> {
   const existing = current.providers.find((provider) => provider.id === id);
   const provider = { id, name: id, type: (selected === 'custom' ? 'custom' : selected) as 'openai' | 'gemini' | 'anthropic' | 'custom', defaultModel, enabled: true, ...(baseUrl ? { baseUrl } : {}), ...(existing?.connectionMode ? { connectionMode: existing.connectionMode } : {}) };
   const key = selected === 'openai' ? (process.env.SEED_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY) : selected === 'gemini' ? process.env.SEED_GEMINI_API_KEY : selected === 'anthropic' ? (process.env.SEED_ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY) : process.env.SEED_API_KEY;
-  if (!key) { console.log(t('config.emptyKey')); return; }
+  if (!key) { await saveConfig(current); console.log(t('config.emptyKey')); return; }
   current.providers = [...current.providers.filter((entry) => entry.id !== id), provider]; current.activeProvider = id; await saveConfig(current); console.log(t('config.saved'));
 }
 config.action(async (options: CommonOptions) => run(async () => { if (process.stdin.isTTY) await configWizard(); else { const value = await loadConfig(); console.log(JSON.stringify({ ...value, envKeys: ['OPENAI_API_KEY', 'SEED_GEMINI_API_KEY', 'SEED_ANTHROPIC_API_KEY', 'SEED_API_KEY'] }, null, 2)); } }, options));
