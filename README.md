@@ -23,6 +23,16 @@ node dist/cli/index.js bloom
 node dist/cli/index.js harvest idea
 ```
 
+The package is not published under the unscoped `seed` name (that name belongs to another npm package). From this repository, run the CLI with:
+
+```bash
+npm exec --package . -- seed --help
+# or, directly from GitHub after cloning:
+npx --yes --package github:hs-hui/seed seed --help
+```
+
+After publishing the scoped package, the public command will be `npx @seed-cli/seed` (or `npm i -g @seed-cli/seed` followed by `seed`).
+
 Use `--lang ko` or `SEED_LANG=ko` for Korean UI. Configure an API key with `seed config set provider openai` and `OPENAI_API_KEY`, or keep using the local fallback while exploring the workflow.
 
 ## MVP commands
