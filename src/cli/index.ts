@@ -15,6 +15,14 @@ import { loginOpenAI } from '../ai/openai-oauth.js';
 import { harvest, harvestTitle } from '../core/harvest.js';
 
 type CommonOptions = { lang?: string; json?: boolean; provider?: string; model?: string; branch?: string };
+const SEED_LOGO = [
+  '███████╗███████╗███████╗██████╗',
+  '██╔════╝██╔════╝██╔════╝██╔══██╗',
+  '███████╗█████╗  █████╗  ██║  ██║',
+  '╚════██║██╔══╝  ██╔══╝  ██║  ██║',
+  '███████║███████╗███████╗██████╔╝',
+  '╚══════╝╚══════╝╚══════╝╚═════╝',
+].join('\n');
 const startupLang = process.argv.includes('--lang') && process.argv[process.argv.indexOf('--lang') + 1] ? process.argv[process.argv.indexOf('--lang') + 1] : process.env.SEED_LANG;
 setLanguage(startupLang);
 const program = new Command();
@@ -226,4 +234,7 @@ config.command('login').argument('<provider>').description('Connect an account')
 }));
 config.command('remove').argument('<provider>').description('Remove a provider').action(async (provider: string) => run(async () => { const value = await loadConfig(); value.providers = value.providers.filter((p) => p.id !== provider); if (value.activeProvider === provider) value.activeProvider = 'local'; await saveConfig(value); console.log(t('config.saved')); }));
 
+const logoOutput = chalk.green(`${SEED_LOGO}\n`);
+if (process.argv.includes('--json')) console.error(logoOutput);
+else console.log(logoOutput);
 program.parseAsync(process.argv);
