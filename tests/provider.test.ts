@@ -6,9 +6,14 @@ import { LocalProvider, OpenAICompatibleProvider } from '../src/ai/provider.js';
 import { askGrowthQuestion, applyGrowth } from '../src/core/growth.js';
 import { plant } from '../src/core/seed-manager.js';
 import { SeedStore } from '../src/storage/store.js';
-import { getOpenAIToken } from '../src/ai/openai-oauth.js';
+import { addCodexOriginator, getOpenAIToken } from '../src/ai/openai-oauth.js';
 
 describe('AI language handling', () => {
+  it('adds the Codex originator to the OAuth authorize URL', () => {
+    const url = addCodexOriginator('https://auth.openai.com/oauth/authorize?client_id=test');
+    expect(new URL(url).searchParams.get('originator')).toBe('codex_cli_rs');
+  });
+
   it('returns Korean local fallback suggestions when Korean is selected', async () => {
     const provider = new LocalProvider('ko');
     const result = JSON.parse(await provider.ask('GROW_QUESTION\nproblem: \nusers: \nopenQuestions: ')) as { question: string };

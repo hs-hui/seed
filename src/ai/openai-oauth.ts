@@ -1,5 +1,6 @@
 import { openaiCredentials } from '@openai-oauth/local';
 import { runOpenAIOAuthLogin } from 'openai-oauth';
+import { spawn } from 'node:child_process';
 
 /** Normalized shape kept for the provider/config commands. */
 export type OpenAITokens = {
@@ -34,6 +35,35 @@ function normalize(session: {
   };
 }
 
+function openBrowser(url: string): void {
+  const command = process.platform === 'win32' ? 'rundll32.exe' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+  const args = process.platform === 'win32' ? ['url.dll,FileProtocolHandler', url] : [url];
+  const child = spawn(command, args, { detached: true, stdio: 'ignore' });
+  child.on('error', () => console.log(`Open this URL in your browser: ${url}`));
+  child.unref();
+}
+
+export function addCodexOriginator(rawUrl: string): string {
+  const url = new URL(rawUrl);
+  url.searchParams.set('originator', 'codex_cli_rs');
+  return url.toString();
+}
+
+function openLoginUrl(message: string): boolean {
+  const prefix = 'OpenAI OAuth login URL: ';
+  if (!message.startsWith(prefix)) return false;
+  try {
+    // The current Codex OAuth authorize endpoint requires the same originator
+    // marker used by the official Codex CLI. openai-oauth 2.0.0 omits it.
+    const loginUrl = addCodexOriginator(message.slice(prefix.length));
+    console.log(`OpenAI OAuth login URL: ${loginUrl}`);
+    openBrowser(loginUrl);
+  } catch {
+    console.log(message);
+  }
+  return true;
+}
+
 /** Read the local Codex auth file without forcing a refresh. */
 export async function loadOpenAITokens(): Promise<OpenAITokens | null> {
   try {
@@ -60,8 +90,10 @@ export async function getOpenAIToken(): Promise<string | undefined> {
 export async function loginOpenAI(): Promise<OpenAITokens> {
   const saved = await runOpenAIOAuthLogin({
     ...(credentialOptions().authFilePath ? { authFilePath: credentialOptions().authFilePath } : {}),
-    openBrowser: true,
-    onMessage: (message) => console.log(message),
+    // Open the URL ourselves so we can add the required Codex originator
+    // parameter before the browser sends the authorization request.
+    openBrowser: false,
+    onMessage: (message) => { if (!openLoginUrl(message)) console.log(message); },
   });
   return normalize(saved.auth);
 }
