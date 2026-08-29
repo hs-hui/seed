@@ -49,7 +49,7 @@ export class SeedStore {
 export async function openStore(): Promise<SeedStore> { return new SeedStore(await ensureSeedRoot()); }
 
 export type GlobalConfig = {
-  version: number; lang?: 'en' | 'ko'; activeProvider: string; providers: ProviderConfig[];
+  version: number; lang?: 'en' | 'ko'; activeProvider: string; providers: ProviderConfig[]; setupCompleted?: boolean;
 };
 export type ProviderConfig = {
   id: string; name: string; type: 'openai' | 'gemini' | 'anthropic' | 'custom';
@@ -61,7 +61,6 @@ const defaultConfig: GlobalConfig = { version: 1, activeProvider: 'local', provi
 export async function configPath(): Promise<string> {
   const home = process.env.SEED_HOME ?? path.join(os.homedir(), '.seed'); await ensureDir(home); return path.join(home, 'config.json');
 }
-export async function hasGlobalConfig(): Promise<boolean> { return exists(await configPath()); }
 export async function loadConfig(): Promise<GlobalConfig> {
   const file = await configPath();
   let global: GlobalConfig = { ...defaultConfig, providers: [...defaultConfig.providers] };

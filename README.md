@@ -13,6 +13,7 @@ Seed turns a vague thought into a focused, buildable direction through a gentle 
 Seed is a local-first CLI for turning an early idea into a clearer, testable project definition. It keeps state in `.seed/`, never edits your source files, and can use a configured OpenAI-compatible provider or a deterministic local fallback.
 
 On the first interactive run, Seed asks for your CLI language (English is the default) and AI provider. You can revisit both settings with `seed config`.
+Use `seed --setup` (or `npm run dev -- --setup`) to reopen the first-run wizard at any time.
 
 ## Quick start
 

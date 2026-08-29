@@ -4,7 +4,7 @@ import { input, select } from '@inquirer/prompts';
 import chalk from 'chalk';
 import { Branch, HarvestType, SeedState } from '../domain.js';
 import { initializeLanguage, t, currentLanguage, setLanguage } from '../i18n/index.js';
-import { openStore, SeedStore, loadConfig, saveConfig, hasGlobalConfig } from '../storage/store.js';
+import { openStore, SeedStore, loadConfig, saveConfig } from '../storage/store.js';
 import { plant, addEvent } from '../core/seed-manager.js';
 import { askGrowthQuestion, applyGrowth } from '../core/growth.js';
 import { branchSuggestions, createBranch, pruneItem, pruneSuggestions } from '../core/branch.js';
@@ -14,7 +14,7 @@ import { providerKey } from '../ai/provider.js';
 import { loginOpenAI } from '../ai/openai-oauth.js';
 import { harvest, harvestTitle } from '../core/harvest.js';
 
-type CommonOptions = { lang?: string; json?: boolean; provider?: string; model?: string; branch?: string };
+type CommonOptions = { lang?: string; json?: boolean; provider?: string; model?: string; branch?: string; setup?: boolean };
 const SEED_LOGO = [
   '███████╗███████╗███████╗██████╗',
   '██╔════╝██╔════╝██╔════╝██╔══██╗',
@@ -27,7 +27,7 @@ const startupLang = process.argv.includes('--lang') && process.argv[process.argv
 setLanguage(startupLang);
 const program = new Command();
 program.name('seed').description(t('help.description')).version('0.1.0')
-  .argument('[idea]', 'Plant a new idea directly').option('--lang <lang>', 'UI language (en or ko)').option('--json', 'JSON output')
+  .argument('[idea]', 'Plant a new idea directly').option('--lang <lang>', 'UI language (en or ko)').option('--json', 'JSON output').option('--setup', 'Run the first-run setup wizard again')
   .action(async (idea: string | undefined, options: CommonOptions) => run(() => plantCommand(idea, options), options));
 
 function addCommon(command: Command): Command {
@@ -59,7 +59,8 @@ function print(value: unknown, json = false): void { if (json) console.log(JSON.
 async function plantCommand(idea: string | undefined, options: CommonOptions): Promise<void> {
   const store = await openStore();
   if (await store.hasSeed()) throw new Error('seed-exists');
-  if (process.stdin.isTTY && !options.json && !(await hasGlobalConfig())) await firstRunSetup(options.lang);
+  const config = await loadConfig();
+  if (process.stdin.isTTY && !options.json && (options.setup || config.setupCompleted !== true)) await firstRunSetup(options.lang);
   if (!idea) {
     if (!process.stdin.isTTY) throw new Error('An idea is required in non-interactive mode.');
     console.log(`${t('welcome.title')}\n${t('welcome.subtitle')}`); idea = (await input({ message: t('welcome.prompt') })).trim();
@@ -176,6 +177,7 @@ const config = program.command('config').description(t('help.config')).option('-
 async function configWizard(): Promise<void> {
   const current = await loadConfig();
   current.lang = currentLanguage();
+  current.setupCompleted = true;
   const selected = await select({ message: t('config.chooseProvider'), choices: [
     { name: 'Local fallback — no API key', value: 'local' },
     { name: 'OpenAI — API key', value: 'openai' },
