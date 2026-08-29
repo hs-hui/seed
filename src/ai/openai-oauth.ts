@@ -1,6 +1,9 @@
 import { openaiCredentials } from '@openai-oauth/local';
 import { runOpenAIOAuthLogin } from 'openai-oauth';
 import { spawn } from 'node:child_process';
+import { chmod, copyFile, mkdir, stat } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 /** Normalized shape kept for the provider/config commands. */
 export type OpenAITokens = {
@@ -12,9 +15,27 @@ export type OpenAITokens = {
   source_path?: string;
 };
 
-function credentialOptions(): { authFilePath?: string; ensureFresh?: boolean } {
-  const authFilePath = process.env.SEED_OPENAI_AUTH_FILE;
-  return authFilePath ? { authFilePath } : {};
+export function openAIAuthFilePath(): string {
+  if (process.env.SEED_OPENAI_AUTH_FILE) return process.env.SEED_OPENAI_AUTH_FILE;
+  const seedHome = process.env.SEED_HOME ?? path.join(os.homedir(), '.seed');
+  return path.join(seedHome, 'oauth', 'openai.json');
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try { await stat(filePath); return true; } catch { return false; }
+}
+
+async function prepareAuthFile(): Promise<string> {
+  const target = openAIAuthFilePath();
+  if (!process.env.SEED_OPENAI_AUTH_FILE && !(await fileExists(target))) {
+    const legacy = path.join(os.homedir(), '.codex', 'auth.json');
+    if (await fileExists(legacy)) {
+      await mkdir(path.dirname(target), { recursive: true });
+      await copyFile(legacy, target);
+      try { await chmod(target, 0o600); } catch { /* Windows ACLs are managed by the user profile. */ }
+    }
+  }
+  return target;
 }
 
 function normalize(session: {
@@ -67,7 +88,7 @@ function openLoginUrl(message: string): boolean {
 /** Read the local Codex auth file without forcing a refresh. */
 export async function loadOpenAITokens(): Promise<OpenAITokens | null> {
   try {
-    const credentials = openaiCredentials({ ...credentialOptions(), ensureFresh: false });
+    const credentials = openaiCredentials({ authFilePath: await prepareAuthFile(), ensureFresh: false });
     const session = await credentials.getSession();
     return session ? normalize(session) : null;
   } catch {
@@ -78,7 +99,7 @@ export async function loadOpenAITokens(): Promise<OpenAITokens | null> {
 /** Read local Codex credentials and refresh them when the package requires it. */
 export async function getOpenAIToken(): Promise<string | undefined> {
   try {
-    const credentials = openaiCredentials({ ...credentialOptions(), ensureFresh: true });
+    const credentials = openaiCredentials({ authFilePath: await prepareAuthFile(), ensureFresh: true });
     const session = await credentials.getSession();
     return session?.accessToken;
   } catch {
@@ -86,10 +107,11 @@ export async function getOpenAIToken(): Promise<string | undefined> {
   }
 }
 
-/** Run the package's loopback browser OAuth flow and save ~/.codex/auth.json. */
+/** Run the package's loopback browser OAuth flow and save Seed's auth file. */
 export async function loginOpenAI(): Promise<OpenAITokens> {
+  const authFilePath = await prepareAuthFile();
   const saved = await runOpenAIOAuthLogin({
-    ...(credentialOptions().authFilePath ? { authFilePath: credentialOptions().authFilePath } : {}),
+    authFilePath,
     // Open the URL ourselves so we can add the required Codex originator
     // parameter before the browser sends the authorization request.
     openBrowser: false,

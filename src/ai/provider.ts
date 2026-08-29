@@ -1,7 +1,7 @@
 import { SeedState, MaturityDimension } from '../domain.js';
 import { loadConfig, ProviderConfig } from '../storage/store.js';
 import { buildContext } from './context-builder.js';
-import { getOpenAIToken } from './openai-oauth.js';
+import { getOpenAIToken, openAIAuthFilePath } from './openai-oauth.js';
 import { createOpenAIOAuth } from '@openai-oauth/ai-sdk';
 import { openaiCredentials } from '@openai-oauth/local';
 import { generateText } from 'ai';
@@ -156,7 +156,7 @@ export class OpenAIOAuthProvider implements LLMProvider {
   private readonly client: ReturnType<typeof createOpenAIOAuth>;
   constructor(public readonly config: ProviderConfig, private readonly language: ProviderLanguage = 'en') {
     this.client = createOpenAIOAuth(openaiCredentials({
-      ...(process.env.SEED_OPENAI_AUTH_FILE ? { authFilePath: process.env.SEED_OPENAI_AUTH_FILE } : {}),
+      authFilePath: openAIAuthFilePath(),
       ensureFresh: true,
       instructions: providerInstructions(language),
     }));

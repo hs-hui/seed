@@ -75,7 +75,7 @@ OpenAI account login is also exposed for the PRD flow:
 seed config login openai
 ```
 
-This opens the local browser OAuth flow provided by `openai-oauth` and stores credentials in `~/.codex/auth.json` (override with `SEED_OPENAI_AUTH_FILE`). It does not require you to create a Client ID. You can also run `npx openai-oauth login` directly. Choose a Codex model available to your account, for example `gpt-5.3-codex`.
+This opens the local browser OAuth flow provided by `openai-oauth` and stores credentials in `~/.seed/oauth/openai.json` (override with `SEED_OPENAI_AUTH_FILE`). If an older login exists in `~/.codex/auth.json`, Seed copies it to the Seed path automatically. It does not require you to create a Client ID. You can also run `npx openai-oauth login` directly, then Seed will import the credentials on first use. Choose a Codex model available to your account, for example `gpt-5.3-codex`.
 
 The supported, documented OpenAI API path is still an API key; a ChatGPT subscription and API billing are separate.
 
