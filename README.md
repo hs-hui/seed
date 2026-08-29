@@ -34,6 +34,13 @@ npx --yes --package github:hs-hui/seed#feat/seed-mvp-bootstrap seed --help
 After publishing the scoped package, use either `npx @seed-cli/seed` or the explicit binary form:
 
 ```bash
+npm install @seed-cli/seed
+npx seed
+```
+
+For a one-off run without adding it to your project:
+
+```bash
 npx --yes --package @seed-cli/seed seed
 ```
 
