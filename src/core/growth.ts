@@ -29,8 +29,9 @@ export async function applyGrowth(store: SeedStore, seed: SeedState, answer: str
   const problem = asked?.content.toLowerCase().includes('problem') && !seed.problem ? trimmed : seed.problem;
   const goals = !asked?.content.toLowerCase().includes('who') && !asked?.content.toLowerCase().includes('problem') && !seed.goals.includes(trimmed)
     ? [...seed.goals, trimmed.slice(0, 160)] : seed.goals;
+  const maturityDelta = Math.max(1, Math.min(8, Math.ceil(trimmed.length / 50)));
   const updated: SeedState = { ...seed, coreIdea: after, problem, users, goals,
-    openQuestions, maturity: Math.min(100, seed.maturity + 5),
+    openQuestions, maturity: Math.min(100, seed.maturity + maturityDelta),
     status: seed.status === 'seedling' ? 'growing' : seed.status, updatedAt: now() };
   updated.maturityDimensions = dimensionsFor(updated);
   updated.maturity = calculateMaturity(updated); updated.status = statusForMaturity(updated.maturity);

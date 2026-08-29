@@ -13,7 +13,8 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-test-'));
     try {
       const store = new SeedStore(root);
-      const seed = await plant(store, 'A repository guide for new developers');
+      const seed = await plant(store, '  A repository guide for new developers  ');
+      expect(seed.originalIdea).toBe('A repository guide for new developers');
       const question = await askGrowthQuestion(store, seed);
       const prompted = await store.load();
       expect(prompted.openQuestions.some((entry) => entry.question === question && entry.status === 'open')).toBe(true);
@@ -24,6 +25,12 @@ describe('Seed MVP flow', () => {
       expect((await store.load()).openQuestions.every((entry) => entry.status === 'answered')).toBe(true);
       expect((await store.events(seed.id)).map((event) => event.type)).toEqual(['plant', 'grow']);
     } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('rejects an empty idea', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'seed-empty-'));
+    try { await expect(plant(new SeedStore(root), '   ')).rejects.toThrow('idea-required'); }
+    finally { await rm(root, { recursive: true, force: true }); }
   });
 
   it('calculates maturity with open-question penalty and decision bonus', () => {

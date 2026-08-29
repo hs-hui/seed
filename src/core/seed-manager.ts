@@ -4,10 +4,12 @@ import { ensureLine } from '../utils/fs.js';
 import { SeedStore } from '../storage/store.js';
 
 export async function plant(store: SeedStore, idea: string, name?: string): Promise<SeedState> {
-  const seed = createSeed(idea, name); await store.create(seed);
+  const normalizedIdea = idea.trim();
+  if (!normalizedIdea) throw new Error('idea-required');
+  const seed = createSeed(normalizedIdea, name); await store.create(seed);
   await ensureLine(`${store.root}/.gitignore`, '# Seed - idea growth tool');
   await ensureLine(`${store.root}/.gitignore`, '.seed/');
-  await addEvent(store, seed, 'plant', `Planted: ${idea}`);
+  await addEvent(store, seed, 'plant', `Planted: ${normalizedIdea}`);
   return seed;
 }
 export async function addConversation(store: SeedStore, entry: Omit<ConversationEntry, 'id' | 'createdAt'>): Promise<ConversationEntry> {

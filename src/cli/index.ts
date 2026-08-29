@@ -33,6 +33,7 @@ function run(action: () => Promise<void>, options: CommonOptions = {}): Promise<
     if (options.json) { console.error(JSON.stringify({ error: message })); process.exitCode = 1; return; }
     if (message === 'no-seed') console.error(t('error.noSeed'));
     else if (message === 'seed-exists') console.error(t('error.seedExists'));
+    else if (message === 'idea-required') console.error(t('error.ideaRequired'));
     else if (message === 'too-many-branches') console.error(t('branch.tooMany'));
     else console.error(t('error.generic', { message }));
     process.exitCode = 1;
