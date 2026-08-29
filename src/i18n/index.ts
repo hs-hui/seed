@@ -17,8 +17,9 @@ export async function initializeLanguage(explicit?: string): Promise<Language> {
   if (env === 'ko' || env === 'en') return setLanguage(env);
   const config = await loadConfig();
   if (config.lang) return setLanguage(config.lang);
-  const locale = process.env.LANG ?? process.env.LC_ALL ?? '';
-  return setLanguage(/^ko/i.test(locale) ? 'ko' : 'en');
+  // English is the product default. Korean is opt-in via --lang, SEED_LANG,
+  // or the persisted config; the host OS locale must not change CLI output.
+  return setLanguage('en');
 }
 export function currentLanguage(): Language { return selectedLanguage ?? 'en'; }
 export function t(key: string, vars: Record<string, string | number> = {}, lang = currentLanguage()): string {
