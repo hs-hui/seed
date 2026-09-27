@@ -12,13 +12,12 @@ export function setLanguage(language?: string): Language {
   return selectedLanguage ?? 'en';
 }
 export async function initializeLanguage(explicit?: string): Promise<Language> {
-  if (explicit === 'ko' || explicit === 'en') return setLanguage(explicit);
+  if (explicit !== undefined) return setLanguage(explicit === 'ko' || explicit === 'en' ? explicit : 'en');
   const env = process.env.SEED_LANG;
-  if (env === 'ko' || env === 'en') return setLanguage(env);
+  if (env !== undefined) return setLanguage(env === 'ko' || env === 'en' ? env : 'en');
   const config = await loadConfig();
   if (config.lang) return setLanguage(config.lang);
-  // English is the product default. Korean is opt-in via --lang, SEED_LANG,
-  // or the persisted config; the host OS locale must not change CLI output.
+  // English is the product default when no explicit locale is available.
   return setLanguage('en');
 }
 export function currentLanguage(): Language { return selectedLanguage ?? 'en'; }

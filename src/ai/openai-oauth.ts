@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { chmod, copyFile, mkdir, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { t } from '../i18n/index.js';
 
 /** Normalized shape kept for the provider/config commands. */
 export type OpenAITokens = {
@@ -14,6 +15,7 @@ export type OpenAITokens = {
   obtained_at?: string;
   source_path?: string;
 };
+type OAuthLanguage = 'en' | 'ko';
 
 export function openAIAuthFilePath(): string {
   if (process.env.SEED_OPENAI_AUTH_FILE) return process.env.SEED_OPENAI_AUTH_FILE;
@@ -38,6 +40,9 @@ async function prepareAuthFile(): Promise<string> {
   return target;
 }
 
+/** Ensure legacy Codex credentials are copied before an OAuth client is built. */
+export async function ensureOpenAIAuthFile(): Promise<string> { return prepareAuthFile(); }
+
 function normalize(session: {
   accessToken: string;
   refreshToken?: string;
@@ -56,11 +61,13 @@ function normalize(session: {
   };
 }
 
-function openBrowser(url: string): void {
+type OAuthWriter = (message: string) => void;
+
+function openBrowser(url: string, language: OAuthLanguage = 'en', write: OAuthWriter = (message) => console.log(message)): void {
   const command = process.platform === 'win32' ? 'rundll32.exe' : process.platform === 'darwin' ? 'open' : 'xdg-open';
   const args = process.platform === 'win32' ? ['url.dll,FileProtocolHandler', url] : [url];
   const child = spawn(command, args, { detached: true, stdio: 'ignore' });
-  child.on('error', () => console.log(`Open this URL in your browser: ${url}`));
+  child.on('error', () => write(t('oauth.browserUrl', { url }, language)));
   child.unref();
 }
 
@@ -70,17 +77,17 @@ export function addCodexOriginator(rawUrl: string): string {
   return url.toString();
 }
 
-function openLoginUrl(message: string): boolean {
+function openLoginUrl(message: string, language: OAuthLanguage, write: OAuthWriter): boolean {
   const prefix = 'OpenAI OAuth login URL: ';
   if (!message.startsWith(prefix)) return false;
   try {
     // The current Codex OAuth authorize endpoint requires the same originator
     // marker used by the official Codex CLI. openai-oauth 2.0.0 omits it.
     const loginUrl = addCodexOriginator(message.slice(prefix.length));
-    console.log(`OpenAI OAuth login URL: ${loginUrl}`);
-    openBrowser(loginUrl);
+    write(t('oauth.loginUrl', { url: loginUrl }, language));
+    openBrowser(loginUrl, language, write);
   } catch {
-    console.log(message);
+    write(message);
   }
   return true;
 }
@@ -108,14 +115,26 @@ export async function getOpenAIToken(): Promise<string | undefined> {
 }
 
 /** Run the package's loopback browser OAuth flow and save Seed's auth file. */
-export async function loginOpenAI(): Promise<OpenAITokens> {
+export async function loginOpenAI(language: OAuthLanguage = 'en', json = false): Promise<OpenAITokens> {
   const authFilePath = await prepareAuthFile();
+  // JSON callers still need the browser URL, but it must not corrupt stdout.
+  // Keep the machine-readable result on stdout and send OAuth progress to stderr.
+  const write: OAuthWriter = json ? (message) => console.error(message) : (message) => console.log(message);
   const saved = await runOpenAIOAuthLogin({
     authFilePath,
     // Open the URL ourselves so we can add the required Codex originator
     // parameter before the browser sends the authorization request.
     openBrowser: false,
-    onMessage: (message) => { if (!openLoginUrl(message)) console.log(message); },
+    onMessage: (message) => {
+      if (openLoginUrl(message, language, write)) return;
+      const savedPrefix = 'Credentials saved to ';
+      if (message.startsWith(savedPrefix)) {
+        const filePath = message.slice(savedPrefix.length);
+        write(t('oauth.credentialsSaved', { path: filePath }, language));
+        return;
+      }
+      write(message);
+    },
   });
   return normalize(saved.auth);
 }

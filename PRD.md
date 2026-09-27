@@ -2,7 +2,7 @@
 
 > **Seed your idea. Grow what matters.**
 >
-> 버전: v1.0 (작성일: 2026-08-29)
+> 버전: v1.93 (작성일: 2026-08-30)
 > 상태: Draft → Review
 > 문서 작성 기준: `Seed.md` (제품 전체 기획 및 설계 명세서) v1
 
@@ -14,7 +14,99 @@
 |------|------|--------|-----------|
 | v0.1 | 2026-08-29 | Product | Seed.md 기반 1차 초안 |
 | v1.0 | 2026-08-29 | Product | AI Provider 설정 요구사항 반영, 구조 상세화 |
-| v1.1 | 2026-08-29 | Product | OQ1~7 결정 반영: OQ2(@seed-cli/seed), OQ3(무료+후원), OQ5(로컬 미지원), OQ6(영/한 다국어 F-17 추가), OQ7(OpenAI OAuth Device Flow) |
+| v1.2 | 2026-08-30 | Product | OpenAI 계정 로그인을 실제 `openai-oauth` 로컬 브라우저 흐름으로 정렬 |
+| v1.3 | 2026-08-30 | Product | OpenAI 기본 모델을 `gpt-5.6-luna`로 통일 |
+| v1.4 | 2026-08-30 | Product | 질문 변경·pause 제어, 대화 근거·성장 이력 컨텍스트, 모순 확인 흐름 반영 |
+| v1.5 | 2026-08-30 | Product | 비개발자용 쉬운 질문, 예측 불가 입력의 AI 의도 분류, 상태 복구 흐름 반영 |
+| v1.6 | 2026-08-30 | Product | 선택 언어 help 제목, provider 실패 fallback, 초보자용 출력 보호 반영 |
+| v1.7 | 2026-08-30 | Product | 모호한 도움 요청의 로컬 안전 판정과 생성 결과의 초보자용 용어 필터 강화 |
+| v1.8 | 2026-08-30 | Product | 빈 답변·잘못된 옵션의 JSON 오류 경로와 비활성 가지 보호 반영 |
+| v1.9 | 2026-08-30 | Product | 과도하게 긴 질문 자동 완화와 bloom/sunlight 결과의 초보자용 출력 보호 반영 |
+| v1.10 | 2026-08-30 | Product | 비활성 branch 보호와 parser JSON 오류, 복합 질문 완화 규칙 반영 |
+| v1.11 | 2026-08-30 | Product | 자연스러운 도움·혼란 표현을 AI/로컬 안전망으로 분류하고, 잘못된 AI 질문을 쉬운 질문으로 자동 교체 |
+| v1.12 | 2026-08-30 | Product | 저장 상태·대화·가지·이벤트 구조 검증과 손상 기록 격리 반영 |
+| v1.13 | 2026-08-30 | Product | wake 재성장 대화에도 도움 요청 판정 적용, 설정 JSON 경계와 OAuth 재활성화 흐름 보강 |
+| v1.14 | 2026-08-30 | Product | 여러 명령이 동시에 실행돼도 상태 파일이 서로 덮어쓰지 않도록 안전한 저장 흐름 보강 |
+| v1.15 | 2026-08-30 | Product | Windows 동시 저장 경쟁 조건을 직렬화하고 임시 파일 정리를 보장 |
+| v1.16 | 2026-08-30 | Product | wake·설정 삭제 경계에서 잘못된 입력이 아이디어·설정을 조용히 변경하지 않도록 오류 흐름 보강 |
+| v1.17 | 2026-08-30 | Product | 라이프사이클·가지 상태 갱신을 최신 저장 상태 기준으로 통일하고 대소문자 입력 경계를 보강 |
+| v1.18 | 2026-08-30 | Product | 어려움+질문 변경 혼합 표현의 안전 분류, 동시 이벤트 append 직렬화, 중첩 경로 garden 탐색, 수확 메뉴 다국어화 반영 |
+| v1.19 | 2026-08-30 | Product | 짧은 긍정·부정 답변의 모델 오판 방지와 아이디어 문장 속 ‘어렵다/다른 질문’ 오탐 완화 |
+| v1.20 | 2026-08-30 | Product | 아이디어 설명 문장과 실제 질문 변경 요청을 구분하는 공통 대화 의도 판정 보강 |
+| v1.21 | 2026-08-30 | Product | 수확 README에 설명·구조 섹션을 보장하고 초보자용 관점 문구를 정리 |
+| v1.22 | 2026-08-30 | Product | 질문 변경 뒤에는 사람·상황·행동 중심의 더 쉬운 질문을 우선하도록 적응형 대화 규칙을 보강 |
+| v1.23 | 2026-08-30 | Product | 자연어 pause·혼란 표현을 확장하고 JSON 모드에서 대화형 선택이 섞이지 않도록 보강 |
+| v1.24 | 2026-08-30 | Product | 정상적인 아이디어 문장과 pause 표현의 오탐을 줄이고 단독 가지치기 후 루트 대화를 복구 |
+| v1.25 | 2026-08-30 | Product | Custom Provider 환경변수와 자연어 pause 표현 지원을 설정 마법사까지 일관되게 연결 |
+| v1.26 | 2026-08-30 | Product | AI 판단을 설명하는 정상적인 아이디어 문장이 제어 입력으로 오인되지 않도록 경계를 보수화 |
+| v1.27 | 2026-08-30 | Product | 문장 속 보류·혼란 표현까지 오프라인 안전망이 처리하도록 자연어 범위를 확장 |
+| v1.28 | 2026-08-30 | Product | 리서치 저장도 동일한 스키마 검증을 거치도록 저장 무결성 기준을 통일 |
+| v1.29 | 2026-08-30 | Product | 초보자의 짧은 어려움·막힘 표현을 오프라인 안전망에서도 질문 변경으로 판정하고 정상 아이디어 문장과 구분 |
+| v1.30 | 2026-08-30 | Product | Garden에서 Seed를 번호·이름·ID·경로로 선택해 대화형 작업공간으로 진입하는 흐름 구체화 |
+| v1.31 | 2026-08-30 | Product | 짧은 어려움·막힘과 AI 판단 요청이 섞인 자연어도 초보자 도움 흐름으로 안전하게 연결 |
+| v1.32 | 2026-08-30 | Product | 주어가 붙은 짧은 어려움 표현까지 질문 변경 흐름에서 안정적으로 처리 |
+| v1.33 | 2026-08-30 | Product | 프로젝트 내부 설정 변경을 `.seed/config.json` 오버라이드에 저장하도록 명시 |
+| v1.34 | 2026-08-30 | Product | 손상된 언어 설정을 저장·출력하지 않고 영어 기본값으로 정규화 |
+| v1.35 | 2026-08-30 | Product | 실행되지 않는 이전 분류 경로와 수확 산출물의 placeholder 흔적 제거 |
+| v1.36 | 2026-08-30 | Product | 초보자의 다양한 어려움·막힘 표현을 신호 조합으로 판정하고 정상적인 제품 설명 오탐을 방지 |
+| v1.37 | 2026-08-30 | Product | 보류와 질문 변경이 섞인 자연어를 공통 판정기로 구분하고 모든 수확 기록의 저장 무결성을 보장 |
+| v1.38 | 2026-08-30 | Product | 보류 접두어가 붙은 질문 변경 요청과 짧은 자연어 요청을 안전하게 구분 |
+| v1.39 | 2026-08-30 | Product | 추임새가 붙은 예시·쉬운 질문 요청과 정상적인 사용자 요구 문장을 구분 |
+| v1.40 | 2026-08-30 | Product | 수확 메뉴 제목을 공통 다국어 카탈로그로 통합 |
+| v1.41 | 2026-08-30 | Product | 선택 기능의 로컬 질문도 비개발자가 바로 답할 수 있는 일상어로 통일 |
+| v1.42 | 2026-08-30 | Product | 답변하기 어렵다는 자연어와 추임새가 섞인 도움 요청을 안전하게 처리 |
+| v1.43 | 2026-08-30 | Product | 선택 기능의 AI 출력에서도 기술 용어가 초보자에게 노출되지 않도록 필터 강화 |
+| v1.44 | 2026-08-30 | Product | 짧은 건너뛰기·다른 질문 요청을 자연어로 인식하고 잘못된 선택 입력은 상태를 변경하지 않도록 보강 |
+| v1.45 | 2026-08-30 | Product | 오프라인 관점·현실 점검 결과도 비개발자용 일상어로 통일 |
+| v1.46 | 2026-08-30 | Product | JSON 오류도 stdout의 단일 객체로 제공해 스크립트가 일관되게 파싱하도록 보강 |
+| v1.47 | 2026-08-30 | Product | 제3자·제품 설명 속 어려움 표현은 질문 변경 요청으로 오인하지 않도록 보수적 경계 보강 |
+| v1.48 | 2026-08-30 | Product | 빈 가지 이름·설명·가지치기 대상을 저장하지 않고 즉시 안내하도록 입력 검증 보강 |
+| v1.49 | 2026-08-30 | Product | 상태 파일이 손상돼도 유효한 최근 백업이 있으면 아이디어를 자동 복구하도록 보강 |
+| v1.50 | 2026-08-30 | Product | OAuth 로그인 진행 문구도 선택한 언어와 동일하게 표시하도록 통합 |
+| v1.51 | 2026-08-30 | Product | 새 환경에서 언어·AI 선택·모델 기본값·아이디어 입력이 이어지는 첫 실행 흐름 검증 |
+| v1.52 | 2026-08-30 | Product | 현재 상태 파일이 없어도 유효한 백업이 있으면 기존 Seed로 인식해 덮어쓰기를 방지 |
+| v1.53 | 2026-08-30 | Product | 잘못된 언어 옵션으로 첫 실행해도 추가 선택 없이 영어 UI로 안전하게 fallback |
+| v1.54 | 2026-08-30 | Product | Custom Provider의 빈 Base URL·모델 설정을 저장하지 않고 바로 안내 |
+| v1.55 | 2026-08-30 | Product | 성장 질문 중 `/exit`·`/quit`·`/q`를 답변으로 저장하지 않고 즉시 세션 종료 |
+| v1.56 | 2026-08-30 | Product | README에 성장 중 종료와 빈 Enter 일시정지 동작을 명시 |
+| v1.57 | 2026-08-30 | Product | 현재 상태 파일이 없어도 유효한 백업 Seed를 Garden에서 계속 찾도록 보강 |
+| v1.58 | 2026-08-30 | Product | `기술적으로`·`technically` 같은 변형도 초보자용 질문에서 자동 완화 |
+| v1.59 | 2026-08-30 | Product | PRD/TRD 버전 참조를 최신 문서 이력과 동기화 |
+| v1.60 | 2026-08-30 | Product | 모델·로컬 대체 질문이 모두 비정상이어도 초보자용 필수 초점 질문을 보장 |
+| v1.61 | 2026-08-30 | Product | API·백엔드·배포 등 소프트웨어 용어가 초보자용 질문에 노출되지 않도록 자동 완화 |
+| v1.62 | 2026-08-30 | Product | 긴 사용자 설명이 포함된 fallback 질문도 실제 표시 길이 80자 미만으로 제한 |
+| v1.63 | 2026-08-30 | Product | 연결 테스트를 통과하지 못한 프로바이더 후보를 설정에 저장하지 않도록 정리 |
+| v1.64 | 2026-08-30 | Product | 자연스러운 혼란·이해 부족 표현을 도움 요청으로 분류하고 일반 제품 설명은 보존 |
+| v1.65 | 2026-08-30 | Product | 질문 변경 직후 시작 문구가 반복되지 않도록 대화 턴 표시를 정리 |
+| v1.66 | 2026-08-30 | Product | history 조회가 이벤트 타임스탬프 기준으로 항상 시간순으로 정렬되도록 보강 |
+| v1.67 | 2026-08-30 | Product | Custom Provider의 모델 이름을 필수 입력으로 검증하고 미완성 설정을 저장하지 않도록 보강 |
+| v1.68 | 2026-08-30 | Product | 장기 대화에서도 전체 질문 이력과 대조해 같은 질문을 반복하지 않도록 보강 |
+| v1.69 | 2026-08-30 | Product | 안전 질문 후보를 초점별로 확장해 장시간 대화의 fallback 반복을 줄임 |
+| v1.70 | 2026-08-30 | Product | 짧아도 추상적인 질문을 감지해 초보자용 구체 질문으로 자동 완화 |
+| v1.71 | 2026-08-30 | Product | config 하위 명령의 JSON 옵션 상속을 일관되게 보장 |
+| v1.72 | 2026-08-30 | Product | Garden 탐색이 프로젝트 밖에서 빈 `.seed/`를 만들지 않도록 비파괴 처리 |
+| v1.73 | 2026-08-30 | Product | 프로젝트가 없는 폴더에서 조회 명령이 `.seed/`를 만들지 않도록 비파괴 처리 |
+| v1.74 | 2026-08-30 | Product | 동시 저장에서도 rolling backup과 현재 Seed 상태의 복구 경계를 보강 |
+| v1.75 | 2026-08-30 | Product | 동시에 수확해도 문서별 선택 언어가 섞이지 않도록 격리 |
+| v1.76 | 2026-08-30 | Product | 같은 문서 유형을 동시에 수확해도 버전이 겹치지 않도록 보강 |
+| v1.77 | 2026-08-30 | Product | 동시에 생성하는 수확 문서의 언어 컨텍스트가 서로 섞이지 않도록 보강 |
+| v1.78 | 2026-08-30 | Product | 동시에 브랜치를 만들어도 활성 브랜치 최대 5개를 넘지 않도록 보강 |
+| v1.79 | 2026-08-30 | Product | 동시에 확정한 사용자 결정도 모두 보존하도록 보강 |
+| v1.80 | 2026-08-30 | Product | 동시에 새 아이디어를 심어도 기존 Seed를 덮어쓰지 않도록 보강 |
+| v1.81 | 2026-08-30 | Product | AI가 판단을 위임받은 자연어(“네가 정해줘”, “You decide”)도 질문 변경으로 안전하게 처리하고, 광범위한 전략 질문을 초보자용 질문으로 자동 완화 |
+| v1.82 | 2026-08-30 | Product | 이전 실행에서 남은 어려운 대기 질문도 재개 시 자동 교체해 초보자용 대화 계약을 유지 |
+| v1.83 | 2026-08-30 | Product | “만들기 전에 무엇을 확인할까요?”처럼 초보자에게 추상적인 준비·전략 질문까지 자동 완화 |
+| v1.84 | 2026-08-30 | Product | 도움 요청 문구를 특정 명령어 암기 대신 자연어로 말하면 AI가 알아듣는 흐름으로 안내 |
+| v1.85 | 2026-08-30 | Product | 가지치기 완료 후 현재 핵심 요약을 함께 보여줘 첫 버전 범위를 바로 확인할 수 있게 함 |
+| v1.86 | 2026-08-30 | Product | REPL 재진입 경로에서도 예전의 어려운 대기 질문을 건너뛰지 않고 쉬운 질문으로 교체 |
+| v1.87 | 2026-08-30 | Product | 재개 시 오래된 질문의 앞부분에 붙은 안내 문장까지 검사해 어려운 용어가 노출되지 않도록 보강 |
+| v1.88 | 2026-08-30 | Product | 사용자의 문장형 제약을 질문에 어색하게 붙이지 않고 처음 보여줄 행동을 자연스럽게 묻도록 개선 |
+| v1.89 | 2026-08-30 | Product | 아이디어 설명 뒤에 붙은 1인칭 어려움·판단 위임도 오프라인에서도 도움 요청으로 분류 |
+| v1.90 | 2026-08-30 | Product | “그냥”, “글쎄요”, “Whatever” 같은 짧은 막힘 표현도 아이디어 내용으로 저장하지 않고 쉬운 질문으로 연결 |
+| v1.91 | 2026-08-30 | Product | “모르겠음”, “어려움”, “No clue”, “I dunno” 같은 단독 막힘 표현도 자연스럽게 도움 요청으로 처리 |
+| v1.92 | 2026-08-30 | Product | CI에서 빌드된 `seed --help` 실행 smoke 검사를 추가해 배포 엔트리포인트를 확인 |
+| v1.93 | 2026-08-30 | Product | AI 후속 안내에도 초보자용 복잡도 가드를 적용하고 추상적인 로컬 질문 후보를 일상어로 교체 |
+| v1.94 | 2026-09-27 | Product | 8.3절의 구현 완료 항목(water/sunlight/evolve/wither/wake/garden/restore/harvest readme·prompt)을 Should/Done으로 재분류하고, merge를 Phase 3 단일 미구현 항목으로 명확히 표시 |
 
 ---
 
@@ -25,12 +117,12 @@
 **SEED** (코드명/제품명 모두 동일)
 
 - CLI 바이너리 명: `seed`
-- npm 패키지명: `seed` (점유 가능 시) 또는 `@seed-cli/seed` (충돌 시 대안)
+- npm 패키지명: `@seed-cli/seed` (npm의 `seed` 이름 충돌을 피하기 위한 scoped 패키지)
 - 제안 슬로건: *"Plant an idea. Grow it. Build it."* / *"From vague thought to clear direction."*
 
 ## 1.2 One-line Description
 
-**Seed는 개발 아이디어를 씨앗처럼 심고, AI가 정원사(Gardener)가 되어 질문과 대화로 아이디어를 성장시키고, 성숙한 뒤 필요한 산출물(PRD/TRD 등)을 수확(harvest)할 수 있게 해주는 개발자용 CLI 도구다.**
+**Seed는 만들고 싶은 생각을 씨앗처럼 심고, AI가 정원사(Gardener)가 되어 쉬운 질문과 대화로 아이디어를 키운 뒤, 바이브코딩에 바로 쓸 수 있는 PRD/TRD 등을 수확(harvest)하게 해주는 CLI 도구다. 개발 경험이 없어도 한 줄로 시작할 수 있다.**
 
 ## 1.3 Vision
 
@@ -121,13 +213,13 @@ Seed는 단순한 "아이디어 채팅 도구"나 "PRD 생성기"가 아니다.
 
 ## 3.1 Primary User (1차 사용자)
 
-**사이드 프로젝트를 자주 시작하는 개인 개발자**
+**개발 경험이 적거나 없는 바이브코딩 입문자**
 
 - 프리랜서/개인 프로젝트를 여러 개 병행
 - "뭔가 만들어보고 싶다" ↔ "어떻게 구체화하지" 사이의 갭 존재
-- Node.js / npm CLI 생태계 사용에 익숙
-- AI 개발 도구 사용 경험 있음 (ChatGPT, Cursor, Claude Code 등)
-- 터미널에서 작업하는 것을 선호
+- 만들고 싶은 것은 있지만 어디서부터 시작할지 막막함
+- ChatGPT 같은 AI와 대화하며 아이디어를 정리해 보고 싶음
+- 터미널을 처음 써도 안내를 따라갈 수 있어야 함
 
 ## 3.2 Secondary Users (2차 사용자)
 
@@ -261,25 +353,25 @@ Q) 어떤 점이 Spotify와 다른가요?
 
 ## 6.1 기능 총괄 테이블
 
-| # | 명령어 | 이름 | 계층 | MVP | Phase 2 |
+| # | 명령어 | 이름 | 계층 | MVP | Phase 2 | 구현 상태 |
 |---|--------|------|------|-----|---------|
-| 1 | `seed` | 심기/시작 | Plant | ✅ | — |
-| 2 | `grow` | 성장 (질문) | Grow | ✅ | — |
-| 3 | `water` | 관점 공급 | Grow | ❌ | ✅ |
-| 4 | `branch` | 가지 뻗기 | Grow | ✅ | — |
-| 5 | `prune` | 가지치기 | Shape | ✅ | — |
-| 6 | `sunlight` | 현실 검증 | Shape | ❌ | ✅ |
-| 7 | `tree` | 구조 보기 | Shape | ✅ | — |
-| 8 | `evolve` | 진화 | Shape | ❌ | ✅ |
-| 9 | `bloom` | 성숙도 검사 | Bloom | ✅ | — |
-| 10 | `harvest` | 수확 | Harvest | ✅ | — |
-| 11 | `garden` | 여러 Seed 관리 | Support | ❌ | ✅ |
-| 12 | `history` | 성장 기록 | Support | ✅ | — |
-| 13 | `wither` | 휴면 | Support | ❌ | ✅ |
-| 14 | `wake` | 재성장 | Support | ❌ | ✅ |
-| 15 | `config` | 설정 (AI Provider 등) | Support | ✅ | — |
-| 16 | `restore` | Prune 복구 | Support | ❌ | ✅ |
-| 17 | `merge` | Branch 결합 | Support | ❌ | ❌(후속) |
+| 1 | `seed` | 심기/시작 | Plant | ✅ | — | ✅ 구현됨 |
+| 2 | `grow` | 성장 (질문) | Grow | ✅ | — | ✅ 구현됨 |
+| 3 | `water` | 관점 공급 | Grow | ❌ | ✅ | ✅ 구현됨 |
+| 4 | `branch` | 가지 뻗기 | Grow | ✅ | — | ✅ 구현됨 |
+| 5 | `prune` | 가지치기 | Shape | ✅ | — | ✅ 구현됨 |
+| 6 | `sunlight` | 현실 검증 | Shape | ❌ | ✅ | ✅ 구현됨 |
+| 7 | `tree` | 구조 보기 | Shape | ✅ | — | ✅ 구현됨 |
+| 8 | `evolve` | 진화 | Shape | ❌ | ✅ | ✅ 구현됨 |
+| 9 | `bloom` | 성숙도 검사 | Bloom | ✅ | — | ✅ 구현됨 |
+| 10 | `harvest` | 수확 | Harvest | ✅ | — | ✅ 구현됨 |
+| 11 | `garden` | 여러 Seed 관리 | Support | ❌ | ✅ | ✅ 구현됨 |
+| 12 | `history` | 성장 기록 | Support | ✅ | — | ✅ 구현됨 |
+| 13 | `wither` | 휴면 | Support | ❌ | ✅ | ✅ 구현됨 |
+| 14 | `wake` | 재성장 | Support | ❌ | ✅ | ✅ 구현됨 |
+| 15 | `config` | 설정 (AI Provider 등) | Support | ✅ | — | ✅ 구현됨 |
+| 16 | `restore` | Prune 복구 | Support | ❌ | ✅ | ✅ 구현됨 |
+| 17 | `merge` | Branch 결합 | Support | ❌ | ❌(후속) | ❌ 미구현 (Phase 3) |
 
 ## 6.2 공통 규칙 (모든 명령어)
 
@@ -287,7 +379,7 @@ Q) 어떤 점이 Spotify와 다른가요?
 - **멀티 Seed**: Seed가 1개만 있으면 기본 대상으로 자동 선택. 여러 개면 선택 프롬프트.
 - **인자**: 대부분 인자 없이 인터랙티브 실행. 단 `seed "아이디어"`는 예외(직접 심기).
 - **취소**: `Ctrl+C` / `/exit` / `--no-input` 지원.
-- **오프라인**: AI 호출이 필요한 명령은 오프라인 시 명확한 에러 + 진행 가능한 로컬 명령(tree, garden, history) 안내.
+- **오프라인**: AI 호출이 실패해도 성장 질문·요약은 내장 local fallback으로 이어가며, 웹 검색만 선택적으로 건너뛴다.
 - **출력**: 색상 · 이모지 · 스피너 · 인터랙티브 선택 지원. `--json` 플래그로 기계 판독 출력 지원 (스크립트 용).
 
 ---
@@ -343,6 +435,25 @@ What makes existing projects difficult to understand?
 5. 히스토리에 conversation 저장
 6. 필요 시 다음 질문 계속 (기본 1턴씩)
 
+질문이 어렵거나 사용자가 `다른 질문`, `잘 모르겠어`, `rephrase`, `skip`처럼
+대화 진행을 요청하면 해당 문장은 아이디어 근거로 저장하지 않는다. 현재 질문을
+취소하고 같은 성장 초점을 유지한 새 질문을 제시한다. 빈 Enter는 질문을 열린
+상태로 남긴 채 세션만 잠시 멈춘다. `잠깐 생각해볼게`나 `I'll answer later` 같은
+표현도 같은 pause 동작으로 처리한다.
+
+질문 변경 요청 다음에는 사람·상황·행동·결과 중 하나만 묻는 구체적인 질문을
+우선한다. 바로 답하기 어려운 추상적인 표현을 다시 반복하지 않는다.
+
+개발 경험이 없는 사용자도 이해할 수 있도록 질문·요약에는 일상어를 사용한다.
+`가정`, `검증`, `스코프`, `시그널`처럼 제품 용어가 필요한 경우에는 쉬운 말로
+바꿔 묻는다. 사용자가 왜 묻는지 모르겠다고 하거나 답변 방법을 모르겠다고 말해도
+이를 아이디어 내용으로 추측하지 않고, 질문의 목적을 짧게 설명한 뒤 더 쉬운 질문으로
+이어간다.
+
+명확한 제어 표현으로 판단하기 어려운 입력은 선택된 AI가 답변인지, 질문을 바꿔 달라는
+도움 요청인지, 잠시 멈추려는 말인지 구분한다. 판단에 실패하면 사용자의 문장을
+그대로 답변으로 보존해 생각을 잃지 않는다.
+
 ### 성장 갱신 출력 예시
 ```text
 🌱 Growth update
@@ -362,6 +473,7 @@ Now:    "A music experience designed around focused coding sessions."
 - [ ] AC-F02-3: 성숙도가 소폭 상승한다 (정보 수집량에 비례)
 - [ ] AC-F02-4: 성장 이전/이후 요약이 표시된다
 - [ ] AC-F02-5: 비대한 아이디어 감지 시 prune 제안을 할 수 있다
+- [ ] AC-F02-6: 질문 변경/재표현 요청은 아이디어에 반영하지 않고 새 질문으로 자연스럽게 이어진다
 
 ---
 
@@ -779,7 +891,7 @@ PRD를 **기술 구조**로 변환. Seed는 구현하지 않지만 기술 정의
 ## 6.12.5 FEATURE F-10e — `harvest readme` [Phase 2]
 
 프로젝트 소개용 README 생성.
-구성: Name / Description / Why / Features / Usage / Installation / Examples / Architecture / Development / License placeholder
+구성: Name / Description / Why / Features / Usage / Installation / Examples / Architecture / Development / License
 
 ---
 
@@ -828,10 +940,9 @@ npx seed config test       # 현재 프로바이더 연결 테스트
 
   1. OpenAI          — 계정 연동 또는 API 키
   2. Google Gemini   — API 키 (Google AI Studio)
-  3. Claude (Claude) — API 키
-  4. Claude            — Claude 플랫폼 API
-  5. Custom Provider — 직접 추가 (Base URL + API Key + 모델)
-  6. Local Model     — Ollama 등 로컬 서버 (실험)
+  3. Anthropic Claude — API 키
+  4. Custom Provider — 직접 추가 (Base URL + API Key + 모델)
+  5. Local fallback  — 외부 자격 증명 없이 로컬 규칙 엔진
 ```
 
 - 선택 → 연결 방식 입력 → **연결 테스트 실행** → 성공 시 기본(active) 프로바이더로 저장
@@ -841,40 +952,40 @@ npx seed config test       # 현재 프로바이더 연결 테스트
 
 | Provider | 지원 방식 | 입력값 | 비고 |
 |----------|-----------|--------|------|
-| OpenAI | ① 계정 연동 (OAuth flow) | `openai login` 브라우저 인증 | Cloud Sync 준비 단계 (Phase 3 시드) |
+| OpenAI | ① 계정 연동 (OAuth flow) | `seed config login openai` 브라우저 인증 | Cloud Sync 준비 단계 (Phase 3 시드) |
 | OpenAI | ② API Key | `sk-...` | 가장 일반적 |
 | Google Gemini | API Key | `AIza...` | google-auth-library |
-| Claude (Claude) | API Key | `sk-ant-...` | |
-| Claude | API Key + (Base URL) | 타사 키 | 사용자 요구 반영 |
+| Anthropic Claude | API Key | `sk-ant-...` | |
 | Custom/OpenAI-compatible | Base URL + API Key + Model | 예: OpenRouter, Groq, vLLM 등 | OpenAI 호환 엔드포인트 재사용 |
-| Local (Ollama) | Base URL (`http://localhost:11434`) + Model | 로컬 무료 | 실험적 |
+| Local fallback | 외부 연결 없음 | 규칙 기반 질문·요약 | 오프라인 기본 제공 |
 
 **핵심 원칙:**
 - **OpenAI는 계정 연동(브라우저 OAuth)과 API 키 두 가지 방식을 모두 지원**한다.
-- **Gemini / Claude / 기타는 API 키 방식**을 기본 지원한다.
+- **Gemini / Anthropic Claude / 기타는 API 키 방식**을 기본 지원한다.
 - 그 외의 모든 LLM 서비스는 **Custom Provider (Base URL + API Key + Model)** 로 추가 가능하다. → 사실상 무제한 확장.
-- 각 프로바이더는 **label(name), type, apiKey(암호화 저장), baseUrl, defaultModel, models[], enabled, isActive** 필드를 가진다.
+- 각 프로바이더는 **id, name, type, baseUrl, defaultModel, temperature, maxTokens, enabled, connectionMode**를 가진다. API 키는 설정 파일에 저장하지 않고 환경변수로, OAuth 자격 증명은 프로젝트 밖의 Seed OAuth 파일로 관리한다.
 
 ### 6.13.5 설정 저장 구조 (사용자 수준)
-- 전역 설정: `~/.seed/config.json` (API 키 포함 — OS 자격 증명 저장소 활용 권장, fallback: 환경변수)
+- 전역 설정: `~/.seed/config.json` (프로바이더·모델·언어만 저장, API 키는 저장하지 않고 환경변수로만 주입)
 - 프로젝트 설정: `.seed/config.json` (프로바이더 선택 등 전역 설정의 오버라이드)
+- 프로젝트 안에서 `seed config` 변경 명령을 실행하면 프로젝트 오버라이드에 저장하고, 프로젝트 밖에서는 전역 설정에 저장한다.
 - **보안 원칙:**
-  - API Key는 평문으로 `.seed/` 안에 저장하지 않는다 (gitignore 대상 + 암호화)
-  - 우선순위: `SEED_API_KEY`/`OPENAI_API_KEY` 등의 **환경변수 > OS 키체인 > 설정 파일(암호화)**
-  - `seed config`에서 `show` 하면 마스킹(`sk-***...`) 표시
+  - API Key는 평문으로 `.seed/`나 설정 파일에 저장하지 않는다.
+  - MVP에서는 provider별 환경변수(`SEED_OPENAI_API_KEY`, `OPENAI_API_KEY` 등)만 읽고, 키체인·암호화 저장은 구현 범위에 포함하지 않는다.
+  - `seed config list`에는 키를 출력하지 않으며, `seed config test`는 키 존재 여부와 실제 연결만 확인한다.
 
 ### 6.13.6 멀티 프로바이더 정책
 | 상황 | 동작 |
 |------|------|
 | 활성 프로바이더 1개 | 기본 사용 |
-| 특정 명령에 프로바이더 지정 | `npx seed grow --provider openai --model gpt-4o` |
+| 특정 명령에 프로바이더 지정 | `npx seed grow --provider openai --model gpt-5.6-luna` |
 | 활성 프로바이더 실패 | 명확한 오류 + 다른 프로바이더 전환 제안 |
 | 비용/속도/품질 비교 | `npx seed config bench` (선택, Phase 2) — 동일 프롬프트로 비교 |
 
 ### 6.13.7 수락 기준 (AC)
 - [ ] AC-F11-1: 첫 실행 시 프로바이더 선택 마법사가 뜬다
 - [ ] AC-F11-2: OpenAI 계정 연동(OAuth)과 API Key 두 방식 모두 연결 가능
-- [ ] AC-F11-3: Gemini/Claude/Claude API Key 방식으로 연결 가능
+- [ ] AC-F11-3: Gemini/Anthropic Claude API Key 방식으로 연결 가능
 - [ ] AC-F11-4: Custom Provider(Base URL+Key+Model)로 임의 서비스 추가 가능
 - [ ] AC-F11-5: 연결 테스트(`config test`)를 통과해야 저장된다
 - [ ] AC-F11-6: 활성 프로바이더 전환이 즉시 반영된다
@@ -892,7 +1003,7 @@ npx seed config test       # 현재 프로바이더 연결 테스트
 
 ### 처리
 - 모든 seed 나열: 이름, 상태, 성숙도, 최근 활동일
-- 선택 진입 (해당 seed의 grow/tree 등)
+- 선택 진입 (해당 seed의 grow/tree 등): 번호·이름·ID·경로를 지정하면 해당 Seed 작업공간으로 들어가며, `/exit`로 이전 작업공간에 돌아온다. JSON/비대화형 실행에서는 선택한 Seed 정보만 출력한다.
 
 ### 출력 예시
 ```text
@@ -973,7 +1084,7 @@ Day 3 🍎 Harvested PRD
 | 명령어 플래그 | `npx seed grow --lang ko` | 최고 |
 | 환경변수 | `SEED_LANG=ko npx seed` | 높음 |
 | 설정 파일 | `seed config set lang ko` (전역 `~/.seed/config.json`) | 중간 |
-| 시스템 감지 | `LANG=ko_KR.UTF-8` (환경변수 없을 때, 자동감지) | 낮음 |
+| 시스템 감지 | 호스트 로케일과 무관하게 자동 적용하지 않음 (영어 기본 유지) | 낮음 |
 | 기본값 | `en` | 기본 |
 
 ### 6.19.3 지원 범위 (MVP)
@@ -1051,6 +1162,7 @@ Seed State + Current Idea + Important Decisions
 |----------|------|
 | plant | 아이디어 초기 구조화 |
 | grow.question | 다음 질문 결정 |
+| grow.input.classify | 애매한 입력을 답변·도움 요청·pause로 구분 |
 | grow.update | 답변 반영 요약 갱신 |
 | branch.suggest | 가지 제안 |
 | prune.suggest | 가지치기 제안 |
@@ -1064,7 +1176,7 @@ Seed State + Current Idea + Important Decisions
 
 상세는 6.13 (F-11) 참조. 요약:
 - 추상화 인터페이스: `LLMProvider` (chat(), stream(), testConnection(), listModels())
-- OpenAI 계정연동 + API, Gemini API, Claude API, Claude API, Custom 추가 가능
+- OpenAI 계정연동 + API, Gemini API, Anthropic Claude API, Custom 추가 가능
 - 프로바이더별 모델명, 온도, maxTokens 설정 가능
 - 오류/재시도: rate limit, timeout, invalid key 처리 공통화
 - 비용 표시: 각 명령 후 대략적 토큰 사용량 (선택적 표시)
@@ -1077,7 +1189,7 @@ Seed State + Current Idea + Important Decisions
 ```text
 명령어: seed, grow, branch, prune, bloom, tree, history, harvest, config
 저장:   .seed/ (JSON 파일 기반)
-AI:     단일 Provider 이상 (OpenAI API + OAuth, Gemini, We64, Custom 아키텍처)
+AI:     단일 Provider 이상 (OpenAI API + OAuth, Gemini, Anthropic Claude, Custom 아키텍처)
 Harvest: idea, prd, trd
 다국어:  영어(기본) + 한국어 UI (OQ6)
 배포:    @seed-cli/seed (OQ2), 무료 오픈소스 (OQ3)
@@ -1086,12 +1198,17 @@ Harvest: idea, prd, trd
 ## 8.2 Should Have (가능하면 포함)
 - 인터랙티브 모드 (`/grow` 등 REPL)
 - 스피너/색상/멀티라인 입력
-- OpenAI 계정 연동 로그인 (Device Authorization Flow, OQ7)
+- OpenAI 계정 연동 로그인 (Local Browser OAuth, OQ7)
 - 환경변수 기반 키 관리
 
-## 8.3 Future (MVP 제외 / Phase 2~3)
-- water, sunlight, evolve, wither, wake, garden, restore, merge
-- 멀티 프로바이더 벤치마크, 진행률/비용 추적
+## 8.3 Phase 2 — 구현 완료 (MVP 이후 출시)
+- water, sunlight, evolve, wither, wake, garden, restore
+- harvest readme, harvest prompt
+- 멀티 프로바이더 벤치마크 (`config bench`, 지연시간 표시)
+
+## 8.4 Phase 3 — 미구현
+- merge (branch 결합, §6.18 참조)
+- 토큰/비용 추적 UI
 - Web UI, 시각 트리, 클라우드 동기화, 협업, AI Personas
 - 추가 언어 팩 (커뮤니티 기여)
 
@@ -1180,7 +1297,7 @@ Harvest: idea, prd, trd
 |---|--------|------|------|------|
 | R1 | AI 질문 품질 불안정 (쓸데없는 질문 반복) | 높음 | 높음 | 강력한 시스템 프롬프트 + Bloom 피드백 루프, 프롬프트 버전 관리 |
 | R2 | 토큰 비용 증가 (긴 대화) | 중간 | 중간 | Context Builder로 선택적 포함, 대화 압축 |
-| R3 | API 키 보안 사고 | 낮음 | 높음 | 키체인/환경변수/암호화, gitignore, 문서화 |
+| R3 | API 키 보안 사고 | 낮음 | 높음 | API 키는 환경변수에만 사용하고, OAuth 파일은 프로젝트 밖에 저장하며 gitignore·문서화로 보호 |
 | R4 | 벤더 API 변경/중단 (OpenAI, Claude 등) | 중간 | 중간 | Provider abstraction, custom 추가 가능 |
 | R5 | 사용자 이탈 (CLI 진입장벽) | 중간 | 높음 | 원샷 npm 패키지, 마법사, 멋진 TUI |
 | R6 | "또 하나의 AI 래퍼"로 인식 | 중간 | 높음 | 성장 메타포 + 비파괴 + 이력 중심 UX로 차별화 |
@@ -1213,13 +1330,13 @@ Harvest: idea, prd, trd
 | OQ2 | npm 패키지명 `seed` 점유 여부 | 높음 | **`@seed-cli/seed`** | 현재 `npmjs.com`에 `seed` 패키지 존재, 충돌로 공식 설치 불가 → `npx @seed-cli/seed` 사용, CLI 바이너리 명은 여전히 `seed` |
 | OQ3 | 무료 사용자 모델: CLI 도구라 유료화 모델은? | 중간 | **무료 오픈소스 + 후원 + 라이선스** | CLI 도구 자체는 무료. 오픈소스 라이선스(MIT 또는 Apache 2.0). 후원(sponsor) + 기업 라이선스 옵션 |
 | OQ4 | CLI 커뮤니티 배포 경로(vs IDE) | 중간 | **npm 우선** | `npx @seed-cli/seed` 기본. 추후 IDE 확장은 Phase 3 |
-| OQ5 | 로컬 모델(Ollama) 공식 지원 여부 | 낮음 | **❌ 미지원** | Custom Provider로 실험 가능하지만 공식 지원하지 않음 (유지보수 비용 대비 효과 낮음) |
+| OQ5 | 로컬 모델(Ollama) 공식 지원 여부 | 낮음 | **❌ 외부 로컬 모델은 미지원** | 외부 연결 없이 동작하는 내장 deterministic fallback은 항상 제공하며, Ollama는 Custom Provider로 실험 가능 |
 | OQ6 | 다국어 UX (비영어 스타일 문구는 아이디어 내용에만?) | 낮음 | **영어(UX 기본) + 한국어 지원** | `--lang ko` 또는 `SEED_LANG=ko` 환경변수. 기본은 영어. 입력 언어는 무관 |
-| OQ7 | OpenAI 계정연동의 서버 인프라(토큰 발급) — 자체 백엔드 필요? | 높음 | **별도 백엔드 불필요 (Device Authorization Grant 사용)** | OpenAI 공식 OAuth Device Flow (아래 상세 참조) |
+| OQ7 | OpenAI 계정연동의 서버 인프라(토큰 발급) — 자체 백엔드 필요? | 높음 | **별도 백엔드 불필요 (로컬 Loopback OAuth 사용)** | `openai-oauth` 패키지가 브라우저 로그인과 localhost callback을 처리 |
 
-## 14.1 OQ7 상세 — OpenAI 계정연동 (OAuth Device Flow)
+## 14.1 OQ7 상세 — OpenAI 계정연동 (Local Browser OAuth)
 
-OpenAI 공식 문서 및 Cookbook에 따라 **OAuth 2.0 Device Authorization Grant** 방식을 사용한다.
+Seed는 `openai-oauth`의 로컬 브라우저 OAuth 흐름을 사용한다. CLI가 공개 authorize URL을 브라우저로 열고, loopback callback을 받아 토큰을 로컬 Seed 경로에 저장한다. 사용자가 Client ID를 직접 발급하거나 Seed 백엔드를 운영할 필요가 없다.
 
 > 참고: OpenAI 공식 API Docs — https://developers.openai.com/api/reference/overview
 > 참고: OpenAI GitHub — https://github.com/openai/openai-python
@@ -1229,35 +1346,28 @@ OpenAI 공식 문서 및 Cookbook에 따라 **OAuth 2.0 Device Authorization Gra
 | 방식 | 설명 | 환경변수 |
 |------|------|----------|
 | **API Key** | Bearer 토큰, 가장 일반적 | `OPENAI_API_KEY` |
-| **OAuth (Device Flow)** | ChatGPT 계정으로 로그인, 자체 백엔드 불필요 | `~/.seed/oauth/openai.json`에 토큰 저장 |
+| **OAuth (Local Browser)** | ChatGPT 계정으로 로그인, 자체 백엔드 불필요 | `~/.seed/oauth/openai.json`에 토큰 저장 |
 
-### OAuth Device Authorization Flow
+### Local Browser OAuth Flow
 
 ```text
-[1] CLI → OpenAI auth0 엔드포인트에 device_code 요청
-        POST https://auth0.openai.com/oauth/device/code
-        Body: { "client_id": "...", "audience": "https://api.openai.com/v1" }
+[1] CLI → `openai-oauth`가 authorize URL과 PKCE/state를 준비
+        → 브라우저를 열고 localhost callback(기본 1455 포트)을 대기
 
-[2] 응답: device_code + user_code + verification_uri
-        → 사용자에게 브라우저 URL + 코드 표시
+[2] 사용자가 브라우저에서 ChatGPT 계정으로 로그인
 
-[3] 사용자가 브라우저에서 로그인 & 코드 확인
-        → https://auth0.openai.com/activate
+[3] callback 성공 시 access_token + refresh_token 반환
+        → ~/.seed/oauth/openai.json에 저장
 
-[4] CLI가 주기적으로 token 엔드포인트 폴링
-        POST https://auth0.openai.com/oauth/token
-        Body: { "grant_type": "urn:ietf:params:oauth:grant-type:device_code", "device_code": "..." }
-
-[5] 성공 시 access_token + refresh_token 반환
-        → ~/.seed/oauth/openai.json에 암호화 저장
+[4] 이후 호출은 로컬 자격 증명을 사용하고 필요하면 자동 갱신
 ```
 
 ### 자체 백엔드 불필요 이유
 
-- Device Flow는 **클라이언트 사이드**에서만 동작 (서버 불필요)
-- `client_id`는 공개 가능 (Public Client)
+- Loopback OAuth는 **클라이언트 사이드**에서만 동작 (Seed 서버 불필요)
+- 공개 Client ID와 callback은 `openai-oauth` 패키지가 관리
 - 토큰 갱신은 CLI 로컬에서 수행
-- 인증 페이지는 OpenAI auth0 서버에서 직접 제공
+- 인증 페이지는 OpenAI 인증 서버에서 직접 제공
 
 ---
 
@@ -1269,20 +1379,21 @@ OpenAI 공식 문서 및 Cookbook에 따라 **OAuth 2.0 Device Authorization Gra
 
 ## Phase 1 (MVP) — v1.0
 - 명령어: seed, grow, branch, prune, bloom, tree, history, harvest(idea/prd/trd), config
-- 멀티 프로바이더 아키텍처 (OpenAI API + OAuth, Gemini API, We64 API, Custom)
+- 멀티 프로바이더 아키텍처 (OpenAI API + OAuth, Gemini API, Anthropic Claude API, Custom)
 - 인터랙티브 모드, JSON 저장, 기본 TUI
 - **다국어 UX: 영어 + 한국어** (기본 영어, `--lang ko`)
 - npm 패키지: `@seed-cli/seed` (OQ2 결정)
 - 무료 오프소스 + 후원 + 기업 라이선스 (OQ3 결정)
 
 ## Phase 2 — v1.1~1.5
-- water, sunlight(+web), evolve, wither, wake, garden
-- harvest readme/prompt, restore, 브랜치 복구
-- 멀티 프로바이더 벤치마크(`config bench`), 토큰/비용 표시
+- water, sunlight(+web), evolve, wither, wake, garden ✅ 구현 완료
+- harvest readme/prompt, restore, 브랜치 복구 ✅ 구현 완료
+- 멀티 프로바이더 벤치마크(`config bench`) ✅ 구현 완료 — 토큰/비용 표시는 미구현
 - 하베스트 버전 관리 개선, 마크다운 export 개선
 - (OQ6 확장) 추가 언어 팩 구조 (커뮤니티 기여 가능)
 
 ## Phase 3 — v2.0+
+- merge (branch 결합) — 미구현
 - Web Dashboard, Visual Tree, Cloud Sync, Collaboration, AI Personas
 - IDE 확장, 팀 기능
 - Cloud Sync 시 OpenAI OAuth 계정연동 기반 확장
@@ -1294,19 +1405,19 @@ OpenAI 공식 문서 및 Cookbook에 따라 **OAuth 2.0 Device Authorization Gra
 | 사용자 니즈 (Seed.md) | PRD 기능 | TRD 모듈 |
 |------------------------|----------|----------|
 | 아이디어 심기 | F-01 seed | seed-manager, plant prompt |
-| 질문 성장 | F-02 grow | growth-engine, context-builder |
-| 관점 공급 | F-03 water | growth-engine(+water) |
-| 가지 뻗기 | F-04 branch | branch-engine |
-| 가지치기 | F-05 prune | seed-manager(prune) |
-| 현실 검증 | F-06 sunlight | research-engine(신규), web-search |
-| 구조 보기 | F-07 tree | ui/tree, seed-manager |
-| 진화 | F-08 evolve | branch-engine(evolve) |
-| 성숙도 검사 | F-09 bloom | maturity-engine |
-| 수확 | F-10 harvest | harvest-engine |
-| AI 설정 (★) | F-11 config | ai/provider, ai/provider-registry, secure-key-store |
-| 정원/기록/휴면/재성장 | F-12~F-14 | seed-manager, history, lifecycle |
-| 복구/결합 | F-15~F-16 | branch-engine |
-| 다국어 UX (★) | F-17 i18n | ui/i18n, i18n/en.json, i18n/ko.json |
+| 질문 성장 | F-02 grow | `src/core/growth.ts`, `src/ai/context-builder.ts` |
+| 관점 공급 | F-03 water | `src/cli/index.ts`, `src/ai/provider.ts` |
+| 가지 뻗기 | F-04 branch | `src/core/branch.ts` |
+| 가지치기 | F-05 prune | `src/core/branch.ts` |
+| 현실 검증 | F-06 sunlight | `src/core/sunlight.ts`, `src/ai/provider.ts` |
+| 구조 보기 | F-07 tree | `src/cli/index.ts`, `src/core/branch.ts` |
+| 진화 | F-08 evolve | `src/cli/index.ts`, `src/core/seed-manager.ts` |
+| 성숙도 검사 | F-09 bloom | `src/core/maturity.ts`, `src/ai/provider.ts` |
+| 수확 | F-10 harvest | `src/core/harvest.ts` |
+| AI 설정 (★) | F-11 config | `src/ai/provider.ts`, `src/ai/openai-oauth.ts`, `src/storage/store.ts` |
+| 정원/기록/휴면/재성장 | F-12~F-14 | `src/core/garden.ts`, `src/core/lifecycle.ts`, `src/cli/index.ts` |
+| 복구/결합 | F-15~F-16 | `src/core/lifecycle.ts` (merge는 Phase 3) |
+| 다국어 UX (★) | F-17 i18n | `src/i18n/index.ts`, `src/i18n/en.json`, `src/i18n/ko.json` |
 
 ---
 

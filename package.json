@@ -2,6 +2,18 @@
   "name": "@seed-cli/seed",
   "version": "0.1.0",
   "description": "Plant an idea. Grow what matters.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hs-hui/seed.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hs-hui/seed/issues"
+  },
+  "homepage": "https://github.com/hs-hui/seed#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "bin": {
     "seed": "dist/cli/index.js"
@@ -9,7 +21,9 @@
   "files": [
     "dist",
     "README.md",
-    "assets"
+    "README.ko.md",
+    "assets",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

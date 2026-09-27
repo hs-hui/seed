@@ -20,7 +20,7 @@ export type OpenQuestion = {
   id: string; seedId: string; branchId?: string; question: string;
   focus?: GrowthFocus;
   importance: 'low' | 'medium' | 'high'; status: 'open' | 'answered' | 'cancelled';
-  answer?: string; answeredAt?: string; createdAt: string;
+  answer?: string; answeredAt?: string; cancelledAt?: string; createdAt: string;
 };
 export type Branch = {
   id: string; seedId: string; name: string; slug: string; summary: string; direction: string;
@@ -38,6 +38,10 @@ export type GrowthEvent = {
   metadata?: Record<string, unknown>;
 };
 export type HarvestType = 'idea' | 'brief' | 'prd' | 'trd' | 'readme' | 'prompt';
+export type HarvestResult = {
+  id: string; seedId: string; type: HarvestType; version: number;
+  content: string; createdAt: string; maturitySnapshot: number;
+};
 export type ResearchEntry = {
   id: string; seedId: string; source: string; title: string; summary: string;
   relevance: 'low' | 'medium' | 'high'; retrievedAt: string; isVerified: boolean; isEstimate: boolean;
@@ -48,18 +52,39 @@ export type SeedState = {
   problem: string; users: string[]; goals: string[]; constraints: string[];
   branches: string[]; activeBranch?: string; prunedItems: string[];
   decisions: Decision[]; openQuestions: OpenQuestion[]; assumptions: string[];
-  createdAt: string; updatedAt: string; parentSeedId?: string;
+  createdAt: string; updatedAt: string; parentSeedId?: string; preDormantStatus?: SeedStatus;
 };
 
-const decisionSchema = z.object({
+export const decisionSchema = z.object({
   id: z.string(), seedId: z.string(), branchId: z.string().optional(), decision: z.string(),
   reason: z.string(), source: z.string(), confirmedByUser: z.boolean(), createdAt: z.string(),
 });
-const questionSchema = z.object({
+export const questionSchema = z.object({
   id: z.string(), seedId: z.string(), branchId: z.string().optional(), question: z.string(),
   focus: z.enum(growthFocuses).optional(),
   importance: z.enum(['low', 'medium', 'high']), status: z.enum(['open', 'answered', 'cancelled']),
-  answer: z.string().optional(), answeredAt: z.string().optional(), createdAt: z.string(),
+  answer: z.string().optional(), answeredAt: z.string().optional(), cancelledAt: z.string().optional(), createdAt: z.string(),
+});
+export const researchSchema = z.object({
+  id: z.string(), seedId: z.string(), source: z.string(), title: z.string(), summary: z.string(),
+  relevance: z.enum(['low', 'medium', 'high']), retrievedAt: z.string(), isVerified: z.boolean(), isEstimate: z.boolean(),
+});
+export const conversationSchema = z.object({
+  id: z.string(), seedId: z.string(), branchId: z.string().optional(),
+  role: z.enum(['user', 'assistant', 'system']), type: z.enum(['question', 'answer', 'summary', 'insight', 'prune-suggestion']),
+  content: z.string(), metadata: z.record(z.unknown()).optional(), createdAt: z.string(),
+});
+export const branchSchema = z.object({
+  id: z.string(), seedId: z.string(), name: z.string(), slug: z.string(), summary: z.string(), direction: z.string(),
+  status: z.enum(['active', 'pruned', 'dormant', 'merged']), maturity: z.number().min(0).max(100), parentBranchId: z.string().optional(),
+  assumptions: z.array(z.string()), decisions: z.array(decisionSchema), openQuestions: z.array(questionSchema), createdAt: z.string(), updatedAt: z.string(),
+});
+export const growthEventSchema = z.object({
+  id: z.string(), seedId: z.string(), type: z.string(), message: z.string(), createdAt: z.string(), metadata: z.record(z.unknown()).optional(),
+});
+export const harvestResultSchema = z.object({
+  id: z.string(), seedId: z.string(), type: z.enum(['idea', 'brief', 'prd', 'trd', 'readme', 'prompt']),
+  version: z.number().int().positive(), content: z.string(), createdAt: z.string(), maturitySnapshot: z.number().min(0).max(100),
 });
 export const seedSchema = z.object({
   version: z.number(), id: z.string(), name: z.string(), status: z.enum(seedStatuses),
@@ -69,7 +94,7 @@ export const seedSchema = z.object({
   goals: z.array(z.string()), constraints: z.array(z.string()), branches: z.array(z.string()),
   activeBranch: z.string().optional(), prunedItems: z.array(z.string()), decisions: z.array(decisionSchema),
   openQuestions: z.array(questionSchema), assumptions: z.array(z.string()), createdAt: z.string(), updatedAt: z.string(),
-  parentSeedId: z.string().optional(),
+  parentSeedId: z.string().optional(), preDormantStatus: z.enum(seedStatuses).optional(),
 });
 
 export function now(): string { return new Date().toISOString(); }

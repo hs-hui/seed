@@ -2,8 +2,8 @@
 
 > **Architecture, data model, and implementation blueprint for the Seed CLI.**
 >
-> 버전: v1.0 (작성일: 2026-08-29)
-> 기반: Seed.md + PRD.md v1.0
+> 버전: v1.93 (작성일: 2026-08-30)
+> 기반: Seed.md v1 + PRD.md v1.93
 > 상태: Draft
 
 ---
@@ -14,7 +14,99 @@
 |------|------|--------|-----------|
 | v0.1 | 2026-08-29 | Tech | Seed.md 기반 1차 초안 |
 | v1.0 | 2026-08-29 | Tech | AI Provider 아키텍처 상세, config/f-11 반영, 스키마 확정 |
-| v1.1 | 2026-08-29 | Tech | OQ1~7 반영: @seed-cli/seed(OQ2), 라이선스(OQ3), 로컬 미지원(OQ5), i18n 추가(OQ6, §25), OpenAI OAuth Device Flow 확정(OQ7) |
+| v1.2 | 2026-08-30 | Tech | OpenAI 계정 인증을 실제 `openai-oauth` 로컬 브라우저/loopback callback 구현으로 정렬 |
+| v1.3 | 2026-08-30 | Tech | OpenAI 기본 모델을 `gpt-5.6-luna`로 통일 |
+| v1.4 | 2026-08-30 | Tech | 성장 컨텍스트 확장, 질문 제어 상태, provider별 대화 role 정규화 반영 |
+| v1.5 | 2026-08-30 | Tech | 비개발자용 질문 가이드와 `GROW_INPUT_CLASSIFY` 의도 분류 반영 |
+| v1.6 | 2026-08-30 | Tech | 다국어 help 제목, provider 실패 fallback, 설정 비밀값 정리 반영 |
+| v1.7 | 2026-08-30 | Tech | 로컬 의도 판정 보강과 질문·요약·관점 결과의 초보자용 출력 가드 반영 |
+| v1.8 | 2026-08-30 | Tech | Commander JSON 오류 출력과 비활성 branch 성장 차단 반영 |
+| v1.9 | 2026-08-30 | Tech | 질문 길이·복합도 가드와 sunlight/bloom AI 결과 정규화 반영 |
+| v1.10 | 2026-08-30 | Tech | 비활성 branch 보호와 parser JSON 오류 경로 정리 반영 |
+| v1.11 | 2026-08-30 | Tech | 자연어 도움 요청 안전망 확장, 분류 응답 오류 시 로컬 판정 재사용, 초보자용 질문 회귀 테스트 추가 |
+| v1.12 | 2026-08-30 | Tech | Seed/branch/conversation/event 저장·로드에 Zod 스키마 검증을 적용하고 손상 파일은 격리 |
+| v1.13 | 2026-08-30 | Tech | wake 입력을 공통 의도 분류 경로에 연결하고, OAuth 성공 시 provider 활성화 상태를 보장 |
+| v1.14 | 2026-08-30 | Tech | atomicWrite 임시 파일명을 UUID 기반으로 분리해 겹치는 쓰기의 상태 오염을 방지 |
+| v1.15 | 2026-08-30 | Tech | 동일 경로 atomicWrite 큐를 도입해 Windows rename 경쟁 조건을 제거하고 동시성 회귀 테스트 추가 |
+| v1.16 | 2026-08-30 | Tech | wake 입력을 공통 분류기에 연결하고 알 수 없는 provider 삭제를 실패 처리 |
+| v1.17 | 2026-08-30 | Tech | wither/wake 최신 상태 재로드, branch ID 대소문자 정규화, lifecycle/복구 회귀 테스트 추가 |
+| v1.18 | 2026-08-30 | Tech | 자연어 도움 요청 안전망·모델 오판 보호, JSONL append 직렬화, 중첩 garden 탐색, 다국어 수확 선택지 반영 |
+| v1.19 | 2026-08-30 | Tech | 짧은 yes/no 답변의 결정적 보존과 아이디어 내용의 질문 변경 오탐 방지 회귀 테스트 반영 |
+| v1.20 | 2026-08-30 | Tech | 로컬·코어 성장 경로가 공유하는 보수적 입력 의도 판정 모듈과 오탐 회귀 케이스 추가 |
+| v1.21 | 2026-08-30 | Tech | README 수확 섹션 검증과 다국어 초보자용 출력 경계를 반영 |
+| v1.22 | 2026-08-30 | Tech | 질문 변경 요청을 `preferSimpleQuestion` 컨텍스트로 전달해 다음 AI 질문을 구체적·초보자용으로 제한 |
+| v1.23 | 2026-08-30 | Tech | 자연어 pause 안전망과 JSON/Tty 출력 경계를 보강하고 OAuth 진행 메시지를 stderr로 분리 |
+| v1.24 | 2026-08-30 | Tech | pause 정규식의 문장 경계를 보수화하고 활성 가지가 모두 잘린 경우 루트로 복귀 |
+| v1.25 | 2026-08-30 | Tech | 설정 마법사가 공통 프로바이더 키 해석기를 사용하고 자연어 제어 입력 경계를 확장 |
+| v1.26 | 2026-08-30 | Tech | AI 관련 정상 문장과 실제 도움 요청을 구분하는 회귀 검증을 추가 |
+| v1.27 | 2026-08-30 | Tech | 답변 문장의 pause 오탐을 줄이고 자연어 혼란·보류 표현 회귀 테스트를 확장 |
+| v1.28 | 2026-08-30 | Tech | `saveResearch`에 ResearchEntry 스키마 검증을 적용하고 손상 입력 테스트를 추가 |
+| v1.29 | 2026-08-30 | Tech | 짧은 `이거 어려워`·`This is hard`·`I'm stuck` 표현의 보수적 질문 변경 판정과 회귀 테스트 반영 |
+| v1.30 | 2026-08-30 | Tech | Garden 선택 진입을 위한 root override·중첩 REPL 복구와 번호/이름/ID/경로 선택 경계 반영 |
+| v1.31 | 2026-08-30 | Tech | 어려움·막힘·AI 판단 요청 혼합 입력의 결정론적 안전망과 회귀 케이스 보강 |
+| v1.32 | 2026-08-30 | Tech | 주어가 붙은 짧은 어려움 표현의 오프라인 판정 회귀 케이스 추가 |
+| v1.33 | 2026-08-30 | Tech | `saveProjectConfig`와 CLI 설정 저장 경로를 추가하고 프로젝트 오버라이드 회귀 테스트 반영 |
+| v1.34 | 2026-08-30 | Tech | 비정상 `lang` 설정을 정규화해 runtime·config 출력 경계를 일치시킴 |
+| v1.35 | 2026-08-30 | Tech | 공통 입력 의도 모듈로 분류 경로를 단일화하고 README 수확 템플릿을 실제 MIT 표기로 정리 |
+| v1.36 | 2026-08-30 | Tech | 초보자의 다양한 어려움·막힘 표현을 신호 조합으로 판정하고 정상적인 제품 설명 오탐을 방지 |
+| v1.37 | 2026-08-30 | Tech | 보류와 질문 변경이 섞인 자연어를 공통 판정기로 구분하고 모든 수확 기록의 저장 무결성을 보장 |
+| v1.38 | 2026-08-30 | Tech | 보류 접두어가 붙은 질문 변경 요청과 짧은 자연어 요청을 안전하게 구분 |
+| v1.39 | 2026-08-30 | Tech | 추임새가 붙은 예시·쉬운 질문 요청과 정상적인 사용자 요구 문장을 구분 |
+| v1.40 | 2026-08-30 | Tech | 수확 메뉴 제목을 공통 다국어 카탈로그로 통합 |
+| v1.41 | 2026-08-30 | Tech | 선택 기능의 로컬 질문도 비개발자가 바로 답할 수 있는 일상어로 통일 |
+| v1.42 | 2026-08-30 | Tech | 답변하기 어렵다는 자연어와 추임새가 섞인 도움 요청을 안전하게 처리 |
+| v1.43 | 2026-08-30 | Tech | 선택 기능의 AI 출력에서도 기술 용어가 초보자에게 노출되지 않도록 필터 강화 |
+| v1.44 | 2026-08-30 | Tech | 짧은 건너뛰기·다른 질문 자연어 안전망과 선택 전 상태 변경 방지 경계 추가 |
+| v1.45 | 2026-08-30 | Tech | LocalProvider의 water/sunlight fallback에서도 기술 용어가 노출되지 않도록 출력 경계 통일 |
+| v1.46 | 2026-08-30 | Tech | JSON 오류 출력 채널을 stdout으로 통일하고 로고만 stderr에 유지 |
+| v1.47 | 2026-08-30 | Tech | 제3자·제품 설명 문장을 입력 의도 안전망에서 보존하고 도움 요청 오탐 회귀 케이스 추가 |
+| v1.48 | 2026-08-30 | Tech | branch/prune 도메인 입력을 저장 전 검증하고 빈 값 회귀 테스트 추가 |
+| v1.49 | 2026-08-30 | Tech | SeedStore.load가 동일 Zod 스키마로 rolling backup을 검증한 뒤 손상 상태를 복구하도록 구현 |
+| v1.50 | 2026-08-30 | Tech | OAuth 브라우저 URL·인증 저장 진행 메시지를 공통 i18n 카탈로그로 이동 |
+| v1.51 | 2026-08-30 | Tech | 새 `SEED_HOME` 격리 TTY에서 first-run wizard와 초기 질문 연결을 검증 |
+| v1.52 | 2026-08-30 | Tech | `SeedStore.hasSeed`가 유효한 rolling backup도 확인해 복구 가능한 상태의 덮어쓰기를 차단 |
+| v1.53 | 2026-08-30 | Tech | first-run setup에서 명시된 잘못된 언어를 영어로 정규화하고 TTY 흐름을 검증 |
+| v1.54 | 2026-08-30 | Tech | Custom provider 설정의 Base URL·모델 필수 입력 경계를 CLI 오류 코드로 추가 |
+| v1.55 | 2026-08-30 | Tech | interactiveGrowthSession·wake 입력에 명시적 세션 종료 경로와 중첩 REPL 전파 플래그 추가 |
+| v1.56 | 2026-08-30 | Tech | 성장 종료 제어와 빈 입력 일시정지의 사용자 동작을 README와 구현 계약에 동기화 |
+| v1.57 | 2026-08-30 | Tech | `findSeedRoot`·Garden 탐색이 검증 가능한 seed backup marker와 백업 상태를 지원 |
+| v1.58 | 2026-08-30 | Tech | 기술적 실현성 표현을 초보자 용어 필터와 회귀 테스트에 포함 |
+| v1.59 | 2026-08-30 | Tech | 문서 머리말이 현재 PRD v1.59에서 최신 이력으로 참조되도록 정리 |
+| v1.60 | 2026-08-30 | Tech | 모델과 로컬 대체 응답이 모두 깨져도 필수 초점별 안전 질문을 반환하도록 보강 |
+| v1.61 | 2026-08-30 | Tech | API·백엔드·배포 등 초보자에게 어려운 용어를 질문 출력 가드에 추가 |
+| v1.62 | 2026-08-30 | Tech | 한국어 질문의 표시 문자 수까지 검사해 fallback 출력 길이 경계를 보장 |
+| v1.63 | 2026-08-30 | Tech | 연결 테스트 전에는 비활성 프로바이더 프로필을 저장하지 않고 로컬 fallback만 유지 |
+| v1.64 | 2026-08-30 | Tech | 혼란·이해 부족 자연어 신호 조합과 제품 설명 보호 패턴을 확장 |
+| v1.65 | 2026-08-30 | Tech | 성장 프롬프트의 시작/후속 라벨을 prompt 횟수 기준으로 결정 |
+| v1.66 | 2026-08-30 | Tech | history 이벤트를 createdAt 기준으로 정렬해 동시 실행에서도 시간순을 보장 |
+| v1.67 | 2026-08-30 | Tech | Custom Provider wizard의 빈 모델 입력을 local fallback으로 되돌리고 프로필을 저장하지 않음 |
+| v1.68 | 2026-08-30 | Tech | bounded AI context와 별도로 전체 질문 이력 중복 검사를 유지 |
+| v1.69 | 2026-08-30 | Tech | 초점별 안전 질문 후보를 확장해 fallback 반복을 줄임 |
+| v1.70 | 2026-08-30 | Tech | 추상적인 짧은 질문을 초보자용 구체 질문으로 교체하는 가드 추가 |
+| v1.71 | 2026-08-30 | Tech | config bench가 상위/하위 위치의 JSON 플래그를 동일하게 처리 |
+| v1.72 | 2026-08-30 | Tech | Garden CLI가 읽기 전용 프로젝트 탐색 경로를 사용 |
+| v1.73 | 2026-08-30 | Tech | targetStore가 조회 명령에서 Seed 루트를 생성하지 않음 |
+| v1.74 | 2026-08-30 | Tech | Seed 저장 시 rolling backup과 본문 교체를 동일 큐로 직렬화 |
+| v1.75 | 2026-08-30 | Tech | AsyncLocalStorage로 동시 harvest 렌더링 언어를 작업별 격리 |
+| v1.76 | 2026-08-30 | Tech | harvest 문서 유형별 버전 계산·저장·이력을 동일 큐로 직렬화 |
+| v1.77 | 2026-08-30 | Tech | AsyncLocalStorage로 동시 harvest 렌더링 언어 컨텍스트를 격리 |
+| v1.78 | 2026-08-30 | Tech | branch/prune/lifecycle/growth 상태 변경을 Seed 파일 큐로 직렬화 |
+| v1.79 | 2026-08-30 | Tech | 사용자 결정 기록도 Seed 상태 파일 큐로 직렬화 |
+| v1.80 | 2026-08-30 | Tech | plant 검사·생성·이력을 Seed 파일 큐로 직렬화하고 중복 생성을 차단 |
+| v1.81 | 2026-08-30 | Tech | AI 판단 위임·자연어 선택 요청을 안전하게 분류하고 광범위한 전략 질문을 구체 질문으로 교체하는 회귀 경계 추가 |
+| v1.82 | 2026-08-30 | Tech | 재개 시 기존 open question도 동일한 초보자 용어·복잡도 가드로 검사하고 어려운 질문은 취소 후 쉬운 질문으로 교체 |
+| v1.83 | 2026-08-30 | Tech | 준비·전략·우선순위 문장의 추상도 패턴을 질문 가드에 추가하고 재개·생성 경로 회귀 테스트 보강 |
+| v1.84 | 2026-08-30 | Tech | 성장 안내 문구를 자유로운 자연어 도움 요청과 AI 자동 완화 동작에 맞춰 다국어 카탈로그로 갱신 |
+| v1.85 | 2026-08-30 | Tech | prune 비대화형 출력에 갱신된 coreIdea를 추가하고 다국어 메시지 키를 검증 |
+| v1.86 | 2026-08-30 | Tech | REPL 질문 공지 경로도 pending question 초보자용 검사를 거쳐 stale 질문 교체를 보장 |
+| v1.87 | 2026-08-30 | Tech | persisted question 원문과 정규화 문장을 모두 beginner guard로 검사하도록 강화 |
+| v1.88 | 2026-08-30 | Tech | Korean assumption fallback에서 sentence-shaped constraint interpolation을 제거하고 자연어 후보를 사용 |
+| v1.89 | 2026-08-30 | Tech | product-intent guard와 명시적 1인칭 도움 신호를 결합해 mixed answer/control 입력의 오탐을 줄임 |
+| v1.90 | 2026-08-30 | Tech | 단독 filler/delegation 입력을 질문 변경 안전망에 추가하고 제품 문장 경계 테스트 |
+| v1.91 | 2026-08-30 | Tech | Korean/English 단독 막힘 어휘를 공통 입력 의도 안전망에 추가하고 회귀 케이스 보강 |
+| v1.92 | 2026-08-30 | Tech | CI에 `node dist/cli/index.js --help` smoke 단계를 추가해 빌드 산출물 실행을 검증 |
+| v1.93 | 2026-08-30 | Tech | GrowthUpdate의 contradictions/suggestions에도 초보자용 복잡도 필터를 적용하고 로컬 validation 질문을 구체화 |
+| v1.94 | 2026-09-27 | Tech | Phase별 확장 로드맵과 구현 우선순위에서 merge를 Phase 2에서 Phase 3로 옮겨 PRD §6.18/§8과 정렬 |
 
 ---
 
@@ -31,11 +123,11 @@
 | **Context Management** | 전체 대화를 매번 보내지 않고, 현재 상태에 필요한 Context만 조립 |
 | **State Machine** | Seed의 상태(seedling→growing→blooming 등)를 안전하게 관리 |
 | **AI Structured Output** | AI 응답에서 JSON/정보를 안정적으로 파싱 (hallucination/형식 불일치 대응) |
-| **Non-blocking Storage** | 파일 기반 로컬 저장의 무결성 보장 (동시 접근, 깨짐 방지) |
+| **Atomic Storage** | 파일 기반 로컬 저장의 무결성 보장 (원자적 쓰기, 백업) |
 | **Multi-Provider Abstraction** | OpenAI, Gemini, Claude, Custom 등 상이한 API를 하나의 인터페이스로 추상화 |
 | **Safe Key Management** | API Key를 평문으로 디스크에 저장하지 않기 |
-| **Resilient Networking** | API 실패, rate limit, 타임아웃에 대한 gracefull handling |
-| **TUI Polish** | 스피너, 색상, 멀티라인 입력을 안정적으로 제공 |
+| **Resilient Networking** | API 실패, rate limit, 타임아웃에 대한 graceful handling |
+| **TUI Polish** | 색상·이모지·대화형 프롬프트를 안정적으로 제공 (스피너/멀티라인은 후속 확장) |
 
 ---
 
@@ -46,29 +138,28 @@
 ```text
 ┌──────────────────────────────────────────────┐
 │              CLI Layer (Commander.js)         │
-│   cli/index.ts  ─►  commands/*.ts            │
+│   cli/index.ts (commands + prompts)           │
 └──────────────────┬───────────────────────────┘
                    │
 ┌──────────────────▼───────────────────────────┐
 │              Core Layer                       │
-│  seed-manager / growth-engine / branch-engine│
-│  maturity-engine / harvest-engine            │
+│  seed-manager / growth / branch / maturity   │
+│  harvest / lifecycle / garden / sunlight     │
 └──────────────────┬───────────────────────────┘
                    │
 ┌──────────────────▼───────────────────────────┐
 │              AI Layer                          │
-│  context-builder / provider (抽象) / prompts/ │
+│  context-builder / provider / OAuth adapter   │
 └──────────────────┬───────────────────────────┘
                    │
 ┌──────────────────▼───────────────────────────┐
 │              Storage Layer                     │
-│  seed-store / conversation-store / branch-store│
-│  config-store / secure-key-store              │
+│  store.ts (JSON + backups + history)          │
 └──────────────────┬───────────────────────────┘
                    │
 ┌──────────────────▼───────────────────────────┐
-│              UI Layer (chalk/ink/prompts)      │
-│  renderer / prompts / tree / spinner          │
+│              UI (inside CLI layer)             │
+│  chalk + @inquirer/prompts + i18n             │
 └──────────────────────────────────────────────┘
 ```
 
@@ -78,7 +169,7 @@
 - **Core → AI**  : 성장/평가 시 AI 호출
 - **Core → Storage** : 상태/대화 저장/로드
 - **AI → Storage** : 프로바이더 설정 읽기
-- **UI** : 다른 레이어 독립, 시각화 전담
+- **UI 출력** : CLI 핸들러에서 i18n·chalk·Inquirer를 조합
 
 ## 2.3 핵심 설계 원칙
 
@@ -87,7 +178,7 @@
 | ** immutability by default** | Seed 상태 변경은 새 객체 복사 후 저장 (원본 훼손 방지) |
 | **Graceful degradation** | AI 실패 시 로컬에서 가능한 기능(tree/garden)은 계속 동작 |
 | **Idempotent harvest** | 같은 상태에서多次 harvest해도 같은 결과 (버전 관리 포함) |
-| **No file write without backup** | `.seed/` 저장 전 `.seed/.backup/`에 기존 파일 복사 (최근 1개만) |
+| **Safe file writes** | `seed.json`은 저장 전 백업하고, 나머지 기록은 원자적 쓰기 또는 append-only로 보존 |
 | **Testable separation** | 각 엔진은 외부 의존성 주입 가능 (mock 테스트 용이) |
 
 ---
@@ -99,11 +190,11 @@
 | 항목 | 버전/리소 |
 |------|-----------|
 | 언어 | TypeScript (strict mode) |
-| 런타임 | Node.js >= 18 LTS (Deno/Bun 고려 — Phase 2) |
-| 패키지 매니저 | npm (Node.js 18이상 내장) |
+| 런타임 | Node.js >= 20 LTS (Deno/Bun 고려 — Phase 2) |
+| 패키지 매니저 | npm (Node.js 20이상 내장) |
 | TypeScript | 5.x |
 | 빌드 | `tsc` → ESM output |
-| 모듈 형식 | **ESM** (TypeScript에서 `--module nodenext`) — Node.js 18 LTS 권장 |
+| 모듈 형식 | **ESM** (TypeScript에서 `--module nodenext`) — Node.js 20 LTS 권장 |
 | 타입 | `strict: true`, `noUncheckedIndexedAccess: true` 권장 |
 
 ## 3.2 핵심 라이브러리
@@ -112,31 +203,21 @@
 |------------|------|------|
 | `commander` | CLI 프레임워크 | 널리 사용, 단순 구조 |
 | `chalk` | 터미널 색상 | 크로스플랫폼, 불필요한 ANSI 관리 |
-| `ink` | React-style TUI (선택) | 복잡한 인터랙티브 UI(트리 등)에 유용 |
-| `inquirer` 또는 `@inquirer/prompts` | 인터랙티브 선택 | 프롬프트, 컨펌트, 멀티셀렉트 |
-| `ora` | 스피너 | AI 호출/저장 중 로딩 표시 |
+| `@inquirer/prompts` | 인터랙티브 선택 | 프롬프트, 컨펌트, 멀티셀렉트 |
 | `zod` | 데이터 검증 | 모든 저장소 입출력 스키마 검증 |
-| `jsonc-parser` | JSON 파싱 (comments 지원) | 설정 파일 (config.json) 파싱 |
-| `dotenv` | 환경변수 로드 | `.env` 파일에서 API Key 로드 |
-| `keytar` 또는 `node-keychain` | OS 키체인 저장 (Optional) | API Key 안전 저장 |
-| `@Claude-ai/sdk` | Claude API | 공식 SDK |
-| `openai` | OpenAI API | 공식 SDK |
-| `@google/generative-ai` | Google Gemini API | 공식 SDK |
-| `node-fetch` 또는 내장 `fetch` | HTTP (Node 18 내장 fetch) | Custom Provider, sunlight web 검색 |
-| `semver` | 버전 관리 | 마이그레이션 |
-| `uuid` | 고유 ID | Seed/Conversation/Branch ID |
-| `lodash-es` 또는 구조분해 | 유틸리티 | 불필요한 코드 중복 방지 |
+| `ai` | LLM 호출 어댑터 | OpenAI OAuth 모델 호출 |
+| `@openai-oauth/local` / `@openai-oauth/ai-sdk` | OpenAI 계정 인증 | 로컬 OAuth 자격 증명과 AI SDK 연결 |
+| `openai-oauth` | 브라우저 로그인 | PKCE + localhost loopback callback |
+| 내장 `fetch` (Node 20) | HTTP | OpenAI-compatible, Gemini, Anthropic, sunlight 검색 |
 
 ## 3.3 개발 도구 (Dev Dependencies)
 
 | 도구 | 용도 |
 |------|------|
 | Vitest | 테스트 |
-| ESLint + @typescript-eslint | 린팅 |
+| TypeScript compiler (`tsc --noEmit`) | 타입 검사·린팅 게이트 |
 | Prettier | 포맷터 |
 | tsx | 개발 시 스크립트 실행 |
-| husky + lint-staged | pre-commit 린팅 |
-| vitest-sonar-reporter (선택) | CI 테스트 리포트 |
 
 ## 3.4 TSConfig (핵심 옵션)
 
@@ -178,7 +259,7 @@
 
 ## 4.2 Node.js 버전
 
-- 권장: **Node.js 18 LTS 이상**
+- 권장: **Node.js 20 LTS 이상**
 - 이유: 내장 `fetch`, ESM 지원, `--module nodenext` 호환
 
 ## 4.3 설치/실행
@@ -190,13 +271,16 @@ npm install -g @seed-cli/seed
 # npx (권장)
 npx @seed-cli/seed
 
-# 설치 불필요
+# 프로젝트에 설치한 뒤 바이너리 실행
+npm install @seed-cli/seed
+npx seed
+
 ```
 
 > **OQ2 결정:** npm `seed` 패키지는 현재 점유 중으로 `@seed-cli/seed` 사용. CLI 바이너리 명은 여전히 `seed`.
 
 ## 4.4 의존성 설치 가능 없는 실행 (optional)
-- Node.js 미설치 사용자 → **Node.js 18+ 미설치 시 안내 메시지** 출력 (설치 가이드 링크 포함)
+- Node.js 미설치 사용자 → **Node.js 20+ 미설치 시 안내 메시지** 출력 (설치 가이드 링크 포함)
 
 ---
 
@@ -317,13 +401,32 @@ export const OpenQuestion = z.object({
   seedId: z.string().uuid(),
   branchId: z.string().uuid().optional(),
   question: z.string(),
+  focus: z.enum(['user', 'problem', 'goal', 'constraint', 'assumption', 'validation']).optional(),
   importance: z.enum(['low', 'medium', 'high']),
   status: z.enum(['open', 'answered', 'cancelled']),
   answer: z.string().optional(),
   answeredAt: z.string().datetime().optional(),
+  cancelledAt: z.string().datetime().optional(),
   createdAt: z.string().datetime(),
 });
 ```
+
+성장 입력은 먼저 대화 제어 의도를 확인한다. `다른 질문`, `너무 어려워 다른질문`,
+`아직 잘 모르겠어요`, `잘 모르겠어`, `왜 이걸 물어봐?`,
+`답을 어떻게 해야 할지 모르겠어`, `rephrase`, `skip` 등 예측하기 어려운 도움 요청은
+답변 증거가 아니다. 현재 `open` 질문을 `cancelled`로 표시하고 같은 초점의 더 쉬운
+질문을 만든다. 이 제어 입력은 conversation에 `metadata.intent = "change-question"`로
+남기며 Seed 요약·성숙도에는 반영하지 않는다. 질문은 비개발자도 이해할 수 있는
+일상어를 사용하고, 내부 분류명(`assumption`, `validation`, `scope`, `signal` 등)을
+사용자에게 노출하지 않는다. 질문 변경 직후에는 `preferSimpleQuestion` 컨텍스트를
+함께 보내 사람·상황·행동·결과 중 하나만 묻는 짧은 질문을 우선하게 한다.
+빈 Enter나 `잠깐 생각해볼게`, `여기까지`, `I'll answer later` 같은 pause 입력은
+질문을 취소하지 않고 그대로 재개할 수 있게 한다.
+명시적인 표현으로 판단하기 어려운 입력은 설정된 LLM에 `GROW_INPUT_CLASSIFY` 요청을
+보내 `answer`, `change-question`, `pause` 중 하나로 분류한다. LLM 호출 실패 시에는
+로컬 안전망을 사용하고, 모델이 명백한 도움 요청을 `answer`로 잘못 반환해도 안전망이
+이를 덮어써서 아이디어에 저장하지 않는다. 그 밖의 알 수 없는 문장은 답변으로
+보존해 사용자의 생각을 잃지 않는다.
 
 ## 5.6 Research (Sunlight 리서치 기록)
 
@@ -367,121 +470,40 @@ export const HarvestResult = z.object({
 seed/
 ├── src/
 │   ├── cli/
-│   │   ├── index.ts                    # CLI 엔트리 (Commander 설정)
-│   │   ├── main.ts                     # 공통 인자 처리
-│   │   └── commands/
-│   │       ├── seed.ts                 # npx seed (plant)
-│   │       ├── grow.ts                 # npx seed grow
-│   │       ├── water.ts                # npx seed water
-│   │       ├── branch.ts               # npx seed branch
-│   │       ├── prune.ts                # npx seed prune
-│   │       ├── sunlight.ts             # npx seed sunlight
-│   │       ├── tree.ts                 # npx seed tree
-│   │       ├── evolve.ts               # npx seed evolve
-│   │       ├── bloom.ts                # npx seed bloom
-│   │       ├── harvest.ts              # npx seed harvest (더보기: idea/prd/trd/readme/prompt)
-│   │       ├── wither.ts               # npx seed wither
-│   │       ├── wake.ts                 # npx seed wake
-│   │       ├── garden.ts               # npx seed garden
-│   │       ├── history.ts              # npx seed history
-│   │       ├── config.ts               # npx seed config (★ Provider 설정)
-│   │       └── restore.ts              # npx seed restore
+│   │   └── index.ts                    # CLI 엔트리·Commander 명령·공통 인자·핸들러
+│   │       # plant/grow/water/... 핸들러는 도메인 엔진을 조합
 │   │
 │   ├── core/
 │   │   ├── seed-manager.ts             # CRUD, 상태 머신, save/load
-│   │   ├── growth-engine.ts            # grow/water 로직
-│   │   ├── branch-engine.ts            # branch/prune/evolve/merge/restore
-│   │   ├── maturity-engine.ts          # bloom 점수 산출
-│   │   ├── harvest-engine.ts           # harvest 산출물 생성
-│   │   ├── decision-tracker.ts         # 결정 저장/조회
-│   │   └── research-engine.ts          # sunlight 리서치 (Phase 2)
+│   │   ├── growth.ts                   # grow 질문·답변·상태 갱신
+│   │   ├── branch.ts                   # branch/prune
+│   │   ├── maturity.ts                 # bloom 점수 산출
+│   │   ├── harvest.ts                  # harvest 산출물 생성
+│   │   ├── lifecycle.ts                # wither/wake/restore
+│   │   ├── garden.ts                   # garden 프로젝트 탐색
+│   │   └── sunlight.ts                 # sunlight 리서치 (Phase 2)
 │   │
 │   ├── ai/
 │   │   ├── context-builder.ts          # AI 호출 시 컨텍스트 조립
-│   │   ├── provider-registry.ts        # 등록된 프로바이더 관리 (★)
-│   │   ├── providers/
-│   │   │   ├── base.ts                 # LLMProvider 인터페이스 정의
-│   │   │   ├── openai-provider.ts      # OpenAI (API Key + OAuth)
-│   │   │   ├── gemini-provider.ts      # Google Gemini
-│   │   │   ├── Claude-provider.ts        # Claude (Claude)
-│   │   │   ├── Claude-platform-provider.ts  # Claude (platform)
-│   │   │   └── custom-provider.ts      # Custom (OpenAI-compatible)
-│   │   ├── prompts/
-│   │   │   ├── plant.ts
-│   │   │   ├── grow-question.ts
-│   │   │   ├── grow-update.ts
-│   │   │   ├── branch-suggest.ts
-│   │   │   ├── prune-suggest.ts
-│   │   │   ├── sunlight-analyze.ts
-│   │   │   ├── bloom-evaluate.ts
-│   │   │   ├── harvest-prd.ts
-│   │   │   ├── harvest-trd.ts
-│   │   │   ├── harvest-readme.ts
-│   │   │   ├── harvest-prompt.ts
-│   │   │   └── evolve-suggest.ts
-│   │   ├── parsers/
-│   │   │   ├── json-extractor.ts       # AI 응답에서 JSON 추출 (```json ... ```)
-│   │   │   └── structured-output.ts    # 형태소-level 파싱 + 검증
-│   │   └── logger.ts                   # AI 호출/오류/비용 로그
+│   │   ├── openai-oauth.ts             # 로컬 브라우저 OAuth·토큰 경로
+│   │   ├── provider.ts                 # LLMProvider와 OpenAI/Gemini/Claude/Custom 구현
+│   │   └── provider-registry.ts        # Provider 레지스트리 (확장 지점)
 │   │
 │   ├── storage/
-│   │   ├── seed-store.ts               # .seed/seed.json CRUD
-│   │   ├── conversation-store.ts       # .seed/conversations/ CRUD
-│   │   ├── branch-store.ts             # .seed/branches/ CRUD
-│   │   ├── config-store.ts             # ~/.seed/config.json, .seed/config.json
-│   │   ├── secure-key-store.ts         # API Key 저장 (OS 키체인/암호화)
-│   │   ├── harvest-store.ts            # .seed/harvest/ CRUD
-│   │   └── research-store.ts           # .seed/research/ CRUD
-│   │
-│   ├── harvest/
-│   │   ├── idea.ts                     # Idea Card 생성 로직
-│   │   ├── brief.ts                    # Brief 생성 로직
-│   │   ├── prd.ts                      # PRD 생성 로직
-│   │   ├── trd.ts                      # TRD 생성 로직
-│   │   ├── readme.ts                   # README 생성 로직
-│   │   └── prompt.ts                   # Coding Prompt 생성 로직
-│   │
-│   ├── ui/
-│   │   ├── renderer.ts                 # 공통 출력 (색상, 이모지, 라인)
-│   │   ├── prompts.ts                  # 인터랙티브 프롬프트 캡슐
-│   │   ├── tree.ts                     # 트리 렌더링 (ASCII/유니코드)
-│   │   ├── maturity-bar.ts             # 프로그레스 바 (██████░░)
-│   │   ├── banner.ts                   # Welcome/Splash
-│   │   └── spinner.ts                  # AI 호출 스피너 (ora 래퍼)
+│   │   └── store.ts                    # JSON 저장, 대화/branch/research/harvest/config
 │   │
 │   └── utils/
-│       ├── id.ts                       # UUID 생성
-│       ├── time.ts                     # 상대 시간, 포맷
-│       ├── path.ts                     # .seed 경로 탐색 (CWD→ up to root)
-│       ├── validate.ts                 # zod 파싱 + 에러 메시지
-│       ├── git.ts                      # .gitignore 자동 추가 (seed 기록 제외)
-│       └── env.ts                      # 환경변수 로드
+│       ├── path.ts                     # .seed 경로 탐색 (CWD → root)
+│       └── fs.ts                       # atomic write, backup, JSONL 유틸리티
 │
 ├── tests/
-│   ├── unit/
-│   │   ├── seed-manager.test.ts
-│   │   ├── growth-engine.test.ts
-│   │   ├── branch-engine.test.ts
-│   │   ├── maturity-engine.test.ts
-│   │   ├── provider-registry.test.ts
-│   │   ├── openai-provider.test.ts
-│   │   ├── context-builder.test.ts
-│   │   └── secure-key-store.test.ts
-│   ├── integration/
-│   │   ├── seed-flow.test.ts           # seed→grow→bloom 통합 테스트
-│   │   ├── harvest-flow.test.ts
-│   │   └── config-flow.test.ts
-│   └── fixtures/
-│       ├── mock-seed.json
-│       └── mock-conversations/
+│   ├── core.test.ts                   # seed/grow/branch/maturity/harvest/lifecycle
+│   ├── provider.test.ts               # provider/OAuth/context 계약
+│   └── i18n.test.ts                   # 언어 우선순위·폴백
 │
 ├── .gitignore
 ├── package.json
 ├── tsconfig.json
-├── vite.config.ts                      # Vitest 설정
-├── eslint.config.js
-├── .prettierrc
-├── husky/                              # pre-commit
 ├── README.md
 ├── PRD.md
 └── TRD.md
@@ -527,7 +549,7 @@ dormant ──(wake)──► (이전 상태로 복귀)
 maturity는 8개 차원의 평균 + 보정값:
 
 ```typescript
-// maturity-engine.ts
+// src/core/maturity.ts
 function calculateMaturity(state: SeedState): number {
   const base = average(state.maturityDimensions.map(d => d.score));
   const penalty = calculateOpenQuestionPenalty(state.openQuestions);
@@ -558,78 +580,36 @@ function calculateDecisionBonus(decisions: Decision[]): number {
 ## 8.1 Provider 인터페이스 (Base Abstraction)
 
 ```typescript
-// ai/providers/base.ts
+// src/ai/provider.ts
 
-export interface ChatMessage {
+export type ProviderMessage = {
   role: 'system' | 'user' | 'assistant';
   content: string;
 }
 
-export interface ChatCompletionOptions {
-  model?: string;
-  temperature?: number;
-  maxTokens?: number;
-  responseFormat?: 'json' | 'text';
-}
-
-export interface ChatCompletionResponse {
-  content: string;
-  model: string;
-  usage: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-  finishReason: string;
-}
-
-export interface LLMProviderConfig {
+export type ProviderConfig = {
   id: string;                // 고유 식별자 ("openai", "gemini", "custom-1")
-  name: string;              // 표시용 이름 ("OpenAI GPT-4o", "Gemini 1.5 Pro")
-  type: 'openai' | 'gemini' | 'we64' | 'we64' | 'custom';  // OQ5: 'local'은 공식 미지원 (Custom Provider로만 사용)
-  apiKey?: string;           // 암호화 저장소에서 읽음
+  name: string;              // 표시용 이름 ("OpenAI GPT-5.6 Luna", "Gemini 1.5 Pro")
+  type: 'openai' | 'gemini' | 'anthropic' | 'custom';
   baseUrl?: string;          // OpenAI-compatible일 때
   defaultModel: string;
-  models: ModelOption[];
+  temperature?: number;
+  maxTokens?: number;
   enabled: boolean;
-  isActive: boolean;
   connectionMode?: 'api-key' | 'oauth';  // OpenAI만 OAuth 가능
-  oauthTokens?: {           // OAuth 저장 시
-    accessToken: string;
-    refreshToken: string;
-    expiresAt: string;
-  };
-  headers?: Record<string, string>;       // 커스텀 헤더
-  extraConfig?: Record<string, unknown>;  // 벤더별 추가 설정
-}
-
-export interface ModelOption {
-  id: string;                // "gpt-4o", "gemini-1.5-pro"
-  displayName: string;
-  contextWindow: number;     // 토큰
-  maxOutputTokens: number;
-  supportsJsonMode?: boolean;
-  supportsVision?: boolean;
 }
 
 export interface LLMProvider {
   readonly id: string;
-  readonly type: string;
+  readonly model: string;
 
-  // 핵심 메서드
-  chat(
-    messages: ChatMessage[],
-    options?: ChatCompletionOptions
-  ): Promise<ChatCompletionResponse>;
+  ask(prompt: string): Promise<string>;
+  chat(messages: ProviderMessage[]): Promise<string>;
+  stream(prompt: string): AsyncIterable<string>;
 
-  // 연결 테스트
-  testConnection(): Promise<{ success: boolean; error?: string; latencyMs?: number }>;
+  testConnection(): Promise<{ success: boolean; error?: string; latencyMs: number }>;
 
-  // 사용 가능한 모델 목록
-  listModels(): Promise<ModelOption[]>;
-
-  // 초기화/설정
-  initialize(config: LLMProviderConfig): Promise<void>;
+  listModels(): Promise<string[]>;
 }
 ```
 
@@ -639,15 +619,9 @@ export interface LLMProvider {
 // ai/provider-registry.ts
 export class ProviderRegistry {
   private providers: Map<string, LLMProvider> = new Map();
-  private activeId: string | null = null;
-
-  async register(config: LLMProviderConfig): Promise<void> { /* ... */ }
-  async unregister(id: string): Promise<void> { /* ... */ }
-  async setActive(id: string): Promise<void> { /* ... */ }
-  getActive(): LLMProvider { /* ... */ }
-  getById(id: string): LLMProvider | undefined { /* ... */ }
-  listAll(): Array<{ id: string; name: string; isActive: boolean; enabled: boolean }> { /* ... */ }
-  async testAll(): Promise<ProviderTestResult[]> { /* ... */ }
+  register(provider: LLMProvider): void { this.providers.set(provider.id, provider); }
+  get(id: string): LLMProvider | undefined { return this.providers.get(id); }
+  list(): LLMProvider[] { return [...this.providers.values()]; }
 }
 ```
 
@@ -655,108 +629,49 @@ export class ProviderRegistry {
 
 ### 연결 방식 1: API Key (기본)
 ```typescript
-// ai/providers/openai-provider.ts
-export class OpenAIProvider implements LLMProvider {
-  private client: OpenAI;  // openai SDK
-
-  async initialize(config: LLMProviderConfig): Promise<void> {
-    const apiKey = await secureKeyStore.getKey(`openai:${config.id}`);
-    this.client = new OpenAI({ apiKey, baseURL: config.baseUrl });
-  }
-
-  async chat(messages, options) {
-    const response = await this.client.chat.completions.create({
-      model: options?.model ?? config.defaultModel,
-      messages: messages.map(m => ({ role: m.role, content: m.content })),
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4096,
-      response_format: options?.responseFormat === 'json'
-        ? { type: 'json_object' }
-        : undefined,
-    });
-    // ... 매핑
-  }
-}
+// src/ai/provider.ts (OpenAI-compatible provider)
+const provider = new OpenAICompatibleProvider(config, apiKey, language);
+const text = await provider.chat(messages);
+// 내장 fetch가 `${baseUrl}/chat/completions`를 호출하고 응답을 공통 문자열로 변환한다.
+// API 키는 SEED_OPENAI_API_KEY 또는 OPENAI_API_KEY에서만 읽는다.
 ```
 
 ### 연결 방식 2: OAuth 계정 연동 (OpenAI 전용)
+
+현재 구현은 `openai-oauth`의 로컬 브라우저 OAuth loopback 흐름을 사용한다. authorize URL은 브라우저로 열고 localhost callback(기본 1455)을 기다리며, 자격 증명은 `~/.seed/oauth/openai.json`에 저장한다. 기존 `~/.codex/auth.json`은 첫 사용 시 Seed 경로로 가져온다.
 ```typescript
+import { runOpenAIOAuthLogin } from 'openai-oauth';
+import os from 'node:os';
+import path from 'node:path';
+
 export async function openaiOAuthLogin(configId: string): Promise<OAuthResult> {
-  // 1. 고유 auth code 생성
-  const authCode = generateAuthCode();
-
-  // 2. 사용자에게 브라우저 URL 안내
-  const authUrl = `https://chatgpt.com/seed-cli/auth?code=${authCode}`;
-  console.log(`🔗 OpenAI 계정에 연결하려면 다음 URL을 열어주세요:\n${authUrl}`);
-
-  // 3. 로컬 HTTP 서버에서 callback 대기 (localhost:{port}/callback)
-  const tokens = await waitForOAuthCallback(authCode, { port: 3847 });
-
-  // 4. 토큰 안전 저장
-  await secureKeyStore.setOAuthTokens(`openai:${configId}`, tokens);
-
-  return { success: true, expiresAt: tokens.expiresAt };
+  // openai-oauth manages PKCE/state, the browser authorize URL, and the
+  // localhost callback. Seed only chooses its project-independent auth path.
+  const saved = await runOpenAIOAuthLogin({
+    authFilePath: process.env.SEED_OPENAI_AUTH_FILE ?? path.join(os.homedir(), '.seed', 'oauth', 'openai.json'),
+    openBrowser: false, // Seed adds the Codex originator and opens the URL itself.
+  });
+  return { success: true, expiresAt: saved.auth.lastRefresh };
 }
 
-// OAuth 토큰 만료 시 자동 갱신 로직
-async function refreshOAuthToken(configId: string): Promise<void> {
-  const tokens = await secureKeyStore.getOAuthTokens(`openai:${configId}`);
-  if (isExpired(tokens.expiresAt)) {
-    const newTokens = await openaiRefreshToken(tokens.refreshToken);
-    await secureKeyStore.setOAuthTokens(`openai:${configId}`, newTokens);
-  }
-}
+// @openai-oauth/local의 ensureFresh 세션 조회가 필요할 때 토큰을 갱신한다.
+const token = await getOpenAIToken();
 ```
 
 ## 8.4 Gemini Provider
 
 ```typescript
-export class GeminiProvider implements LLMProvider {
-  private genAI: GoogleGenerativeAI;
-
-  async initialize(config: LLMProviderConfig): Promise<void> {
-    const apiKey = await secureKeyStore.getKey(`gemini:${config.id}`);
-    this.genAI = new GoogleGenerativeAI(apiKey);
-  }
-
-  async chat(messages, options) {
-    const model = this.genAI.getGenerativeModel({
-      model: options?.model ?? config.defaultModel,
-    });
-    // messages → Gemini 형식 변환 (user/model 분리)
-    const result = await model.generateContent({ contents: geminiMessages });
-    // ... 매핑
-  }
-}
+// Gemini/Anthropic도 동일한 LLMProvider를 구현하지만, 내장 fetch로 각
+// provider의 요청 envelope(user/model role, system instruction)를 만든다.
+// 키는 SEED_GEMINI_API_KEY/GEMINI_API_KEY 또는 SEED_ANTHROPIC_API_KEY에서 읽는다.
 ```
 
 ## 8.5 Custom Provider (OpenAI-compatible)
 
 ```typescript
-export class CustomProvider implements LLMProvider {
-  async initialize(config: LLMProviderConfig): Promise<void> {
-    // config.baseUrl + config.apiKey 사용
-    // 모든 OpenAI-compatible 엔드포인트 지원
-  }
-
-  async chat(messages, options) {
-    const response = await fetch(`${config.baseUrl}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        ...config.headers,  // 커스텀 헤더 (API 키 형식 차이 대응)
-      },
-      body: JSON.stringify({
-        model: options?.model ?? config.defaultModel,
-        messages,
-        temperature: options?.temperature ?? 0.7,
-        max_tokens: options?.maxTokens ?? 4096,
-      }),
-    });
-    // OpenAI format 응답을 통일 형식으로 변환
-  }
-}
+// Custom provider도 OpenAICompatibleProvider를 재사용한다.
+const provider = new OpenAICompatibleProvider(config, providerKey(config)!, language);
+const text = await provider.chat(messages);
 ```
 
 ## 8.6 설정 저장 구조
@@ -765,95 +680,50 @@ export class CustomProvider implements LLMProvider {
 ```json
 {
   "version": 1,
+  "lang": "en",
   "activeProvider": "openai",
+  "setupCompleted": true,
   "providers": [
     {
       "id": "openai",
-      "name": "OpenAI GPT-4o",
+      "name": "OpenAI GPT-5.6 Luna",
       "type": "openai",
       "connectionMode": "api-key",
-      "defaultModel": "gpt-4o",
-      "models": [
-        { "id": "gpt-4o", "displayName": "GPT-4o", "contextWindow": 128000, "maxOutputTokens": 4096, "supportsJsonMode": true },
-        { "id": "gpt-4o-mini", "displayName": "GPT-4o Mini", "contextWindow": 128000, "maxOutputTokens": 4096, "supportsJsonMode": true },
-        { "id": "o3", "displayName": "o3", "contextWindow": 200000, "maxOutputTokens": 100000 }
-      ],
+      "defaultModel": "gpt-5.6-luna",
       "enabled": true,
-      "isActive": true
+      "temperature": 0.7,
+      "maxTokens": 4096
     },
     {
-      "id": "gemini-1",
-      "name": "Gemini 1.5 Pro",
-      "type": "gemini",
-      "connectionMode": "api-key",
-      "defaultModel": "gemini-1.5-pro",
-      "models": [
-        { "id": "gemini-1.5-pro", "displayName": "Gemini 1.5 Pro", "contextWindow": 1048576, "maxOutputTokens": 8192 },
-        { "id": "gemini-2.5-flash", "displayName": "Gemini 2.5 Flash", "contextWindow": 1048576, "maxOutputTokens": 8192 }
-      ],
-      "enabled": true,
-      "isActive": false
-    },
-    {
-      "id": "Claude-1",
-      "name": "Claude (Claude)",
-      "type": "Claude",
-      "connectionMode": "api-key",
-      "defaultModel": "Claude-sonnet-4-20250514",
-      "models": [
-        { "id": "Claude-sonnet-4-20250514", "displayName": "Claude Sonnet 4", "contextWindow": 200000, "maxOutputTokens": 8192 },
-        { "id": "Claude-opus-4-20250514", "displayName": "Claude Opus 4", "contextWindow": 200000, "maxOutputTokens": 32000 }
-      ],
-      "enabled": true,
-      "isActive": false
-    },
-    {
-      "id": "openrouter-1",
-      "name": "OpenRouter (Custom)",
+      "id": "local",
+      "name": "Local fallback",
       "type": "custom",
-      "connectionMode": "api-key",
-      "baseUrl": "https://openrouter.ai/api",
-      "defaultModel": "meta-llama/llama-3-70b-instruct",
-      "models": [
-        { "id": "meta-llama/llama-3-70b-instruct", "displayName": "Llama 3 70B", "contextWindow": 8192, "maxOutputTokens": 4096 }
-      ],
-      "enabled": true,
-      "isActive": false,
-      "headers": { "HTTP-Referer": "https://seed-cli.com", "X-Title": "Seed CLI" }
+      "defaultModel": "rule-based",
+      "enabled": true
     }
-  ],
-  "settings": {
-    "defaultTemperature": 0.7,
-    "maxTokensPerRequest": 4096,
-    "autoRetry": true,
-    "maxRetries": 2,
-    "showTokenUsage": true,
-    "telemetry": "off"
-  }
+  ]
 }
 ```
 
 ### API Key 보안 전략
 
 ```
-우선순위:
-1. 환경변수 (예: SEED_OPENAI_API_KEY, OPENAI_API_KEY, SEED_GEMINI_API_KEY)
-2. OS 키체인 (keytar / node-keychain)
-3. 설정 파일 (AES-256 암호화, passphrase 기반 — 최후 수단)
-
-설정 파일 평문 저장 금지 → gitignore 필수
+API 키 모드에서는 환경변수(예: `SEED_OPENAI_API_KEY`, `OPENAI_API_KEY`,
+`SEED_GEMINI_API_KEY`)만 읽는다. OpenAI OAuth 모드에서는 별도의
+`~/.seed/oauth/openai.json` 세션만 읽으며 API 키로 묵시적 전환하지 않는다.
+API 키는 설정 파일이나 프로젝트 `.seed/`에 저장하지 않는다. OAuth 파일은 프로젝트 외부에
+두고, 환경변수와 파일 경로를 모두 사용자가 직접 제어한다.
 ```
 
 ### 프로젝트별 오버라이드 (`.seed/config.json`)
 ```json
 {
-  "activeProvider": "gemini-1",
-  "overrides": {
-    "defaultModel": "gemini-2.5-flash",
-    "temperature": 0.5
-  }
+  "activeProvider": "gemini",
+  "lang": "ko"
 }
 ```
+프로젝트 설정은 전역 설정과 병합되며 현재 작업 디렉터리에서 상위로 탐색된다.
+프로젝트 내부에서 실행한 설정 변경은 이 오버라이드 파일에 저장하고, 프로젝트 밖의 변경은 전역 파일에 저장한다.
 
 ---
 
@@ -887,48 +757,29 @@ export interface AIContext {
 ## 9.2 컨텍스트 조립 알고리즘
 
 ```typescript
-export async function buildContext(
-  seedId: string,
+export function buildContext(
+  seedState: SeedState,
   command: string,       // 'grow', 'bloom', 'harvest.prd' 등
-  options?: BuildContextOptions
-): Promise<AIContext> {
-
-  const seedState = await seedStore.load(seedId);
-  const decisions = await decisionTracker.getImportant(seedId);
-  const openQuestions = await openQuestions.getOpen(seedId);
-  const recentConversations = await conversationStore.getRecent(seedId, 10);
-
-  // command별 전처리
-  let systemPrompt: string;
-  let includedData: Partial<AIContext> = {};
-
-  switch(command) {
-    case 'grow':
-      systemPrompt = await loadPrompt('grow-question');
-      includedData = {
-        recentConversation: recentConversations,  // 대화 맥락
-      };
-      break;
-
-    case 'bloom':
-      systemPrompt = await loadPrompt('bloom-evaluate');
-      includedData = {
-        relevantHistory: await historyStore.getSummary(seedId),
-      };
-      break;
-
-    case 'harvest.prd':
-      systemPrompt = await loadPrompt('harvest-prd');
-      includedData = {
-        recentConversation: await conversationStore.getAll(seedId),
-        relevantHistory: await historyStore.getAll(seedId),
-        sunlightResearch: await researchStore.getAll(seedId),
-      };
-      break;
-    // ... 나머지 명령어
-  }
-
-  return { seedState, coreIdea: seedState.coreIdea, decisions, openQuestions, ...includedData, systemPrompt };
+  recentConversation: ConversationEntry[] = [],
+  currentBranch?: Branch,
+  extras: { relevantHistory?: GrowthEvent[]; sunlightResearch?: ResearchEntry[] } = {},
+): AIContext {
+  const decisions = [...seedState.decisions, ...(currentBranch?.decisions ?? [])]
+    .filter((decision) => decision.confirmedByUser).slice(-10);
+  const openQuestions = seedState.openQuestions
+    .filter((question) => question.status === 'open' && (currentBranch ? (!question.branchId || question.branchId === currentBranch.id) : !question.branchId))
+    .slice(-12);
+  return {
+    seedState,
+    coreIdea: currentBranch?.summary ?? seedState.coreIdea,
+    importantDecisions: decisions,
+    openQuestions,
+    recentConversation: recentConversation.slice(-10),
+    ...(extras.relevantHistory?.length ? { relevantHistory: extras.relevantHistory.slice(-12) } : {}),
+    ...(currentBranch ? { currentBranch, branchContext: { decisions: currentBranch.decisions.filter((decision) => decision.confirmedByUser).slice(-10), openQuestions: currentBranch.openQuestions.filter((question) => question.status === 'open').slice(-10) } } : {}),
+    ...(extras.sunlightResearch?.length ? { sunlightResearch: extras.sunlightResearch.slice(-8) } : {}),
+    systemPrompt: `You are Seed's Gardener. Help the idea grow through ${command}; ask one easy, focused question in everyday language, reflect the user's words, and never invent facts or decisions.`,
+  };
 }
 ```
 
@@ -1056,14 +907,23 @@ seed가 `.seed/`를 생성하면 자동으로 프로젝트 `.gitignore`에 추�
 
 ```typescript
 async function atomicWrite(filePath: string, data: string): Promise<void> {
-  const tmpPath = `${filePath}.tmp`;
-  await fs.writeFile(tmpPath, data, 'utf-8');
-  // Windows: rename 전 기존 파일 삭제 필요
-  if (process.platform === 'win32') {
-    await fs.rm(filePath, { force: true });
-  }
-  await fs.rename(tmpPath, filePath);
+  // Queue replacements per path and use a unique sibling staging file.
+  // This avoids cross-wired temporary files and Windows rename races when
+  // multiple commands save the same state at once.
+  await queueFor(filePath, async () => {
+    const tmpPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await fs.writeFile(tmpPath, data, 'utf-8');
+      if (process.platform === 'win32') await fs.rm(filePath, { force: true });
+      await fs.rename(tmpPath, filePath);
+    } finally {
+      await fs.rm(tmpPath, { force: true });
+    }
+  });
 }
+
+// Append-only event writes use the same per-path queue so JSONL records are
+// never interleaved during concurrent command execution.
 ```
 
 ## 11.4 마이그레이션
@@ -1149,9 +1009,7 @@ export async function startInteractiveMode(seedId: string): Promise<void> {
 | `--provider <id>` | 해당 명령에만 특정 프로바이더 사용 |
 | `--model <name>` | 해당 명령에만 특정 모델 사용 |
 | `--branch <id>` | 특정 branch 대상 |
-| `--no-interactive` | 인터랙티브 모드 비활성화 |
-| `--verbose` | 상세 로그 출력 |
-| `--dry-run` | 저장 없이 출력만 |
+| `--no-input` | 인터랙티브 프롬프트 비활성화 |
 
 ---
 
@@ -1160,30 +1018,32 @@ export async function startInteractiveMode(seedId: string): Promise<void> {
 ## 13.1 설정 우선순위
 
 ```text
+명령행 옵션 (--lang / --provider / --model)
+  ▲ override
+환경변수 (SEED_LANG, provider별 API key 등)
+  ▲ override
 프로젝트 설정 (.seed/config.json)
   ▲ override
 전역 설정 (~/.seed/config.json)
   ▲ override
-환경변수 (SEED_*, OPENAI_API_KEY 등)
-  ▲ override
-OS 키체인 (API Key)
-  ▲ override
-기본값 (에러: 설정 필요 안내)
+기본값 (영어 UI·local fallback)
 ```
 
 ## 13.2 환경변수
 
 | 변수 | 용도 |
 |------|------|
-| `SEED_CONFIG_PATH` | 전역 설정 경로 오버라이드 |
 | `SEED_OPENAI_API_KEY` | OpenAI API Key |
 | `OPENAI_API_KEY` | OpenAI API Key (fallback) |
 | `SEED_GEMINI_API_KEY` | Gemini API Key |
-| `SEED_Claude_API_KEY` | Claude API Key |
-| `SEED_TELEMETRY` | `off` / `basic` / `full` |
-| `SEED_NO_COLOR` | 색상 비활성화 |
+| `SEED_ANTHROPIC_API_KEY` | Anthropic Claude API Key |
+| `SEED_OPENAI_BASE_URL` | OpenAI-compatible Base URL 오버라이드 |
+| `SEED_OPENAI_MODEL` | OpenAI API-key 모드 모델 오버라이드 |
+| `SEED_OPENAI_OAUTH_MODEL` | OpenAI OAuth 모드 모델 오버라이드 |
+| `SEED_OPENAI_AUTH_FILE` | OpenAI OAuth 자격 증명 경로 오버라이드 |
+| `SEED_AI_TIMEOUT_MS` | AI 요청 타임아웃(ms) |
+| `SEED_MAX_GROW_TURNS` | 인터랙티브 성장 턴 상한 |
 | `SEED_HOME` | `~/.seed/` 오버라이드 |
-| `DEBUG=seed:*` | 개발용 상세 로그 (NODE_DEBUG 대안) |
 
 ---
 
@@ -1191,44 +1051,28 @@ OS 키체인 (API Key)
 
 ## 14.1 에러 유형
 
-```typescript
-// core/errors.ts
-export class SeedError extends Error {
-  constructor(
-    public code: string,     // "PROVIDER_NOT_CONFIGURED", "AI_PARSE_FAILED"
-    message: string,
-    public recoverable: boolean = true
-  ) { super(message); }
-}
-
-export class ProviderError extends SeedError { /* API 호출 실패 */ }
-export class ParseError extends SeedError { /* AI 응답 파싱 실패 */ }
-export class StorageError extends SeedError { /* 파일 저장 실패 */ }
-export class ValidationError extends SeedError { /* Zod 검증 실패 */ }
-export class ConfigError extends SeedError { /* 설정 미완료 */ }
-```
+현재 CLI는 작업 경계에서 안정적인 문자열 오류 코드를 사용한다. 예: `no-seed`,
+`provider-credential-missing`, `provider-not-configured:<id>`,
+`branch-selection-not-found`, `invalid-harvest`.
 
 ## 14.2 복구 전략
 
 | 에러 | 복구 |
 |------|------|
 | API Key 없음 | `seed config` 마법사 안내 |
-| API 호출 실패 (네트워크) | `--retry` 자동 재시도 (최대 2회), 로컬 기능(tree, history)은 계속 |
+| API 호출 실패 (네트워크) | 공통 요청 계층이 안전한 오류를 최대 3회 재시도하고, 성장 작업은 로컬 fallback으로 계속 |
 | API rate limit | 대기 후 재시도 + 명확한 메시지 |
-| AI 응답 파싱 실패 | 재시도 후, 실패 시 자연어 응답 그대로 표시 + "형식을 맞추지 못했습니다" 안내 |
-| `.seed/` 디렉터리 쓰기 실패 | 파일 권한 안내, `sudo` 사용 안내 |
-| 프로바이더 미설정 | config 마법사로 안내 (첫 실행 시 자동) |
-| JSON 스키마 검증 실패 | 마이그레이션 시도 → 실패 시 백업으로 롤백 |
+| AI 응답 파싱 실패 | JSON 블록/객체를 best-effort 추출하고, 실패 시 결정론적 로컬 응답 사용 |
+| `.seed/` 디렉터리 쓰기 실패 | 오류 코드를 그대로 전달하고 기존 상태를 백업으로 보존 |
+| 프로바이더 미설정 | 명시적 프로바이더는 오류, 자동 활성 프로바이더는 로컬 fallback |
+| JSON 스키마 검증 실패 | `SeedStore.load()`가 오류를 전달하고 `.backup/` 파일을 보존 |
 
 ## 14.3 AI 응답 파싱 (JSON extraction)
 
 ```typescript
-// ai/parsers/json-extractor.ts
-export function extractJSON<T>(response: string): T {
-  // 1. ```json ... ``` 블록에서 추출 시도
-  // 2. { ... } 또는 [ ... ] 으로 시작/끝 찾기
-  // 3. JSON.parse 시도
-  // 4. 실패 시 Zod 스키마로 검증 → 실패 시 재시도 (의사 결정 포함)
+// src/ai/provider.ts
+function parseJsonObject(response: string): Record<string, unknown> | undefined {
+  // fenced JSON → 첫 { 부터 마지막 }까지 best-effort 추출
 }
 ```
 
@@ -1238,15 +1082,15 @@ export function extractJSON<T>(response: string): T {
 
 ## 15.1 API Key 관리
 
-- **평문 저장 금지**: 환경변수 > OS 키체인 > 암호화된 설정 파일
-- `.gitignore` 필수: `*.json`, `*.bak` 파일
-- `seed config show` 시 마스킹 표시: `sk-***...xyz`
-- OAuth 토큰은 만료 시 자동 갱신 시도, 갱신 실패 시 명확한 재인증 안내
+- API 키는 환경변수에서만 읽고 프로젝트 `.seed/`나 config JSON에 저장하지 않는다.
+- `.seed/`는 gitignore 대상이며 OAuth 자격 증명은 프로젝트 밖 `~/.seed/oauth/openai.json`에 둔다.
+- OAuth 세션은 `@openai-oauth/local`의 만료 갱신을 사용하고, 실패하면 재인증 오류를 표시한다.
 
 ## 15.2 입력 검증
 
-- 모든 사용자 입력은 Zod 스키마 검증 후 저장
-- AI 출력도 Zod 검증 후 신뢰 (ParseError 발생 시 재시도)
+- 아이디어·답변·결정은 빈 값과 대상 선택을 CLI 경계에서 검증한다.
+- Seed·Research·Harvest 파일은 Zod 스키마로 로드 시 검증한다.
+- AI 응답은 JSON 파싱·필드 보정 후 신뢰하며, 파싱 실패 시 로컬 fallback을 사용한다.
 
 ## 15.3 파일 시스템
 
@@ -1317,7 +1161,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        node-version: [18, 20]
+        node-version: [20, 22]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -1339,25 +1183,22 @@ jobs:
 {
   "name": "@seed-cli/seed",   // OQ2: 'seed'는 점유 중이라 스코프 패키지 사용
   "version": "0.1.0",
-  "license": "MIT",           // OQ3: 무료 오픈소스 (MIT 또는 Apache 2.0, 결정 후 확정)
-  "funding": {                // OQ3: 후원 링크
-    "type": "github",
-    "url": "https://github.com/sponsors/seed-cli"
-  },
+  "license": "MIT",
   "bin": {
-    "seed": "./dist/cli/index.js"   // 바이너리 명은 여전히 'seed'
+    "seed": "dist/cli/index.js"   // 바이너리 명은 여전히 'seed'
   },
   "type": "module",
-  "main": "./dist/cli/index.js",
-  "files": ["dist/", "README.md", "LICENSE"],
-  "engines": { "node": ">=18" },
+  "files": ["dist/", "README.md", "assets/", "LICENSE"],
+  "engines": { "node": ">=20" },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
     "dev": "tsx src/cli/index.ts",
+    "start": "node dist/cli/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint src/",
-    "prepublishOnly": "npm run build"
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "format": "prettier --write ."
   }
 }
 ```
@@ -1387,25 +1228,26 @@ npm publish --access public
 
 ## 19.1 로깅
 
-| 레벨 | 용도 |
+| 채널 | 용도 |
 |------|------|
-| `debug` | AI 호출 파라미터/응답, 파일 저장 상세 |
-| `info` | 명령어 실행 완료, 상태 변경 |
-| `warn` | 재시도, 프로바이더 폴백 |
-| `error` | API 실패, 파싱 실패, 저장 실패 |
+| `.seed/history/events.jsonl` | 명령어 완료와 상태 변경의 append-only 기록 |
+| `stderr` | 지역화된 오류와 설정·프로바이더 실패 안내 |
+| 원격 로그/텔레메트리 | 사용하지 않음 (기본값) |
 
-설정: `DEBUG=seed:*` 환경변수로 상세 로그 활성화.
+현재 CLI는 외부 로그 파일이나 원격 텔레메트리를 만들지 않습니다. 상태 변경은
+`.seed/history/events.jsonl`에 append-only 이벤트로 남고, 오류는 명령 종료 코드와
+지역화된 메시지로 반환됩니다. 프로바이더 요청은 타임아웃·재시도 후 로컬 fallback으로
+이어집니다.
 
 ## 19.2 토큰/비용 추적 (Phase 2)
 
-- 각 AI 호출 시 `usage` 필드를 `history/events.jsonl`에 기록
-- `npx seed config bench`로 프로바이더별 비용/속도 비교
-- `seed.json`에 `estimatedCost` 필드 (선택)
+- 프로바이더별 비용·토큰 usage 수집은 Phase 2 범위
+- 현재 `config bench`는 연결된 프로바이더 응답을 비교하고 원격 데이터를 전송하지 않음
 
 ## 19.3 오류 로그
 
-- `~/.seed/error.log`에 에러만 기록 (최대 1MB, 자동 로테이션)
-- `seed config debug`로 로그 위치 안내
+- 현재 별도 오류 로그 파일은 만들지 않음
+- 사용자는 `.seed/history/events.jsonl`과 CLI stderr를 통해 실패 원인을 확인
 
 ---
 
@@ -1429,7 +1271,7 @@ npm publish --access public
 
 | 지점 | 확장 방향 |
 |------|-----------|
-| `LLMProvider` 인터페이스 | 새 프로바이더(We64, 맞춤형) 추가 시 구현만 추가 (OQ5: Ollama/Local은 공식 미지원) |
+| `LLMProvider` 인터페이스 | 새 프로바이더(Anthropic Claude, 맞춤형) 추가 시 구현만 추가 (OQ5: Ollama 외부 모델은 공식 미지원, 내장 fallback 제공) |
 | `HarvestType` 열거형 | 새 산출물(비즈니스 플랜, 기획서 등) 추가 시 enum 확장 |
 | `ContextBuilder` | 전체 → 부분 압축 전략, 멀티모달(이미지) 확장 대비 |
 | `SeedStore` | JSON → SQLite → Cloud 저장소 전환 인터페이스 |
@@ -1441,8 +1283,8 @@ npm publish --access public
 | Phase | 기능 | 기술 확장 |
 |-------|------|-----------|
 | Phase 1 (MVP) | seed/grow/branch/prune/bloom/tree/history/harvest | JSON 저장, 멀티 프로바이더, CLI REPL |
-| Phase 2 | water/sunlight/evolve/wither/wake/garden/restore/merge | SQLite 저장, web 검색 통합, 토큰/비용 표시 |
-| Phase 3 | Web UI, Visual Tree, Cloud Sync, Collaboration | REST API 서버, DB 전환, 인증, 실시간 동기화 |
+| Phase 2 | water/sunlight/evolve/wither/wake/garden/restore (구현 완료) | SQLite 저장 전환은 선택 사항으로 보류, web 검색 통합 완료, 토큰/비용 표시는 미구현 |
+| Phase 3 | merge, Web UI, Visual Tree, Cloud Sync, Collaboration | REST API 서버, DB 전환, 인증, 실시간 동기화 |
 
 ---
 
@@ -1454,39 +1296,39 @@ Seed.md #65 기준 + 기술 의존성 반영:
 우선순위 1 (Phase 1 — MVP 필수):
   ────────────────────────────────
   [1]  Zod 스키마 정의 (5장 데이터 모델)
-  [2]  Storage layer (seed-store, conversation-store, branch-store)
+  [2]  Storage layer (`SeedStore` in `src/storage/store.ts`)
   [3]  Provider abstraction + OpenAI Provider + config store
   [4]  CLI framework + seed 명령어 (plant)
   [5]  Context Builder
-  [6]  Growth Engine (grow)
-  [7]  Branch Engine (branch)
-  [8]  Branch Engine (prune)
-  [9]  Maturity Engine (bloom)
-  [10] Tree renderer
+  [6]  Growth engine (`src/core/growth.ts`)
+  [7]  Branch engine (`src/core/branch.ts`)
+  [8]  Maturity engine (`src/core/maturity.ts`)
+  [9]  Tree renderer (`src/cli/index.ts`)
   [11] History (event log)
   [12] Harvest Engine (idea, prd, trd)
-  [13] TUI (chalk, ora, prompts)
+  [13] TUI (chalk, Inquirer prompts)
   [14] i18n 패키지 (영어 + 한국어, §25 참조)
 
 우선순위 2 (Phase 2):
   ─────────────────────
-  [14] water
-  [15] sunlight (+ web search)
-  [16] evolve
-  [17] wither / wake
-  [18] garden
-  [19] restore
-  [20] harvest readme / prompt
-  [21] 멀티 프로바이더 벤치마크
-  [22] SQLite 저장소 전환 (선택)
+  [14] water — 구현 완료
+  [15] sunlight (+ web search) — 구현 완료
+  [16] evolve — 구현 완료
+  [17] wither / wake — 구현 완료
+  [18] garden — 구현 완료
+  [19] restore — 구현 완료
+  [20] harvest readme / prompt — 구현 완료
+  [21] 멀티 프로바이더 벤치마크 (`config bench`) — 구현 완료
+  [22] SQLite 저장소 전환 (선택) — 미구현, 보류
 
 우선순위 3 (Phase 3):
   ─────────────────────
-  [23] Web UI / Dashboard
-  [24] Visual Tree
-  [25] Cloud Sync
-  [26] Collaboration
-  [27] AI Personas
+  [23] merge (branch 결합) — 미구현
+  [24] Web UI / Dashboard
+  [25] Visual Tree
+  [26] Cloud Sync
+  [27] Collaboration
+  [28] AI Personas
 ```
 
 ---
@@ -1497,21 +1339,18 @@ Seed.md #65 기준 + 기술 의존성 반영:
 |------|------|-----------|
 | `src/cli/index.ts` | CLI 엔트리 | Commander 설정, 공통 옵션 |
 | `src/core/seed-manager.ts` | Seed CRUD + 상태 머신 | save/load/update/transition |
-| `src/core/growth-engine.ts` | grow/water 로직 | AI 호출 → 상태 갱신 |
-| `src/core/branch-engine.ts` | branch/prune/evolve/restore | 가지 관리 |
-| `src/core/maturity-engine.ts` | bloom 점수 산출 | 8차원 계산 + penalty/bonus |
+| `src/core/growth.ts` | grow 질문·답변·상태 갱신 | AI 호출 → 요약/성숙도 갱신 |
+| `src/core/branch.ts` | branch/prune | 가지 관리 |
+| `src/core/lifecycle.ts` | evolve/wither/wake/restore | 수명주기·복구 관리 |
+| `src/core/maturity.ts` | bloom 점수 산출 | 8차원 계산 + penalty/bonus |
 | `src/ai/provider-registry.ts` | 프로바이더 등록/관리 | 멀티 프로바이더 오케스트레이션 |
-| `src/ai/providers/base.ts` | LLMProvider 인터페이스 | 핵심 추상화 |
-| `src/ai/providers/openai-provider.ts` | OpenAI API Key + OAuth | OpenAI 전용 |
-| `src/ai/providers/gemini-provider.ts` | Google Gemini API | Gemini 전용 |
-| `src/ai/providers/custom-provider.ts` | OpenAI-compatible 커스텀 | 범용 프로바이더 |
-| `src/ai/context-builder.ts` | AI 호출 컨텍스트 조립 | 토큰 예산 관리 |
-| `src/ai/prompts/*.ts` | 시스템 프롬프트 모음 | 명령어별 전문 프롬프트 |
-| `src/ai/parsers/json-extractor.ts` | AI 응답 JSON 추출 | 재시도 포함 |
-| `src/storage/secure-key-store.ts` | API Key 저장 | OS 키체인/암호화 |
-| `src/storage/config-store.ts` | 설정 저장/로드 | 전역/프로젝트 오버라이드 |
-| `src/ui/renderer.ts` | 공통 출력 | 색상/이모지 렌더링 |
-| `src/ui/tree.ts` | 트리 렌더링 | ASCII + 유니코드 |
+| `src/ai/provider.ts` | LLMProvider + OpenAI/Gemini/Anthropic/Custom | 역할 기반 chat, JSON 파싱, 재시도·fallback |
+| `src/ai/input-intent.ts` | 성장 입력 의도 안전망 | 초보자 도움 요청·pause와 아이디어 문장 구분 |
+| `src/ai/openai-oauth.ts` | OpenAI 계정 OAuth | loopback 로그인·Seed auth 경로 |
+| `src/ai/context-builder.ts` | AI 호출 컨텍스트 조립 | 최근 대화·이력·리서치 예산 제한 |
+| `src/storage/store.ts` | 상태·설정 저장/로드 | 원자적 JSON·백업·프로젝트 오버라이드 |
+| `src/core/sunlight.ts` | 공개 검색 | 선택적 웹 출처 수집 |
+| `src/core/harvest.ts` | 산출물 수확 | 버전 Markdown·결과 JSON |
 
 ---
 
@@ -1531,7 +1370,12 @@ Core rules:
 4. If the idea is growing too large, suggest pruning.
 5. Your output MUST be valid JSON matching the provided schema.
 6. Never invent facts. Use TBD for unknowns.
-7. Your tone: a gardener nurturing a seed — thoughtful, not cheerleading.
+7. Assume the user may be new to software and vibe coding. Use everyday words;
+   do not expose terms such as assumption, validation, scope, signal, MVP,
+   persona, roadmap, or tech stack without explaining them simply.
+8. Treat confusion, “ask another question,” requests for examples, and “why
+   are you asking?” as a request for help, never as product evidence.
+9. Your tone: a gardener nurturing a seed — thoughtful, not cheerleading.
 ```
 
 ## 24.2 응답 스키마 (예시: grow.question)
@@ -1553,75 +1397,38 @@ Core rules:
 
 # 25. i18n (다국어 지원) ★ 사용자 추가 요구사항 (OQ6)
 
-> **OQ6 결정:** 영어(기본) + 한국어 지원. UI 문구는 언어 팩, AI 콘텐츠는 언어 무관. PRD §6.19 (F-17) 참조.
+> **OQ6 결정:** 영어(기본) + 한국어 지원. UI 문구는 언어 팩, AI 콘텐츠는 사용자의 최신 입력 언어를 따른다. PRD §6.19 (F-17) 참조.
 
 ## 25.1 언어 팩 구조
 
 ```text
 src/i18n/
 ├── index.ts            # t() 함수, 로더, 폴백
-├── types.ts            # TranslationKey 타입 (자동 생성/수동 유지)
 ├── en.json             # 영어 팩 (기본)
 └── ko.json             # 한국어 팩
 ```
 
-### 타입 안전한 키 구조
+### 키 기반 로더
 
 ```typescript
-// src/i18n/types.ts
-export interface TranslationSchema {
-  'welcome.title': string;
-  'welcome.subtitle': string;
-  'welcome.prompt': string;
-  'plant.created': string;
-  'growth.update': { before: string; after: string };
-  'bloom.overall': { score: number };
-  'error.providerNotConfigured': string;
-  'error.retryLimit': { attempt: number };
-  // ... 모든 UI 문자열 키
-}
-
-export type TranslationKey = keyof TranslationSchema;
-
 // src/i18n/index.ts
-import en from './en.json';
-import ko from './ko.json';
+import en from './en.json' with { type: 'json' };
+import ko from './ko.json' with { type: 'json' };
 
 export type Language = 'en' | 'ko';
-const catalogs: Record<Language, TranslationSchema> = { en, ko };
+const catalogs: Record<Language, Record<string, string>> = { en, ko };
 
-// 변수 치환 지원 — {name} 패턴
-export function t(key: string, vars?: Record<string, string | number>, lang?: Language): string {
-  const catalog = catalogs[resolveLang(lang)];
-  let template = catalog[key] ?? catalogs.en[key] ?? key;  // 폴백: ko → en → 키 이름
-  if (vars) {
-    for (const [k, v] of Object.entries(vars)) {
-      template = template.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
-    }
-  }
-  return template;
-}
+// t() performs ko → en → key fallback and {name} replacement.
 ```
 
 ## 25.2 언어 결정 우선순위
 
 ```typescript
-// src/i18n/index.ts
-export function resolveLang(explicit?: Language): Language {
-  // 1. 명령행 플래그 --lang ko (최우선)
-  if (explicit) return explicit;
-  // 2. 환경변수 SEED_LANG
-  const env = process.env.SEED_LANG;
-  if (env === 'ko') return 'ko';
-  // 3. 설정 파일 lang (전역/프로젝트)
-  const configLang = configStore.get('lang');
-  if (configLang === 'ko') return 'ko';
-  // 4. 시스템 로케일 (LANG/LC_ALL 감지 — ko* 포함 시 ko)
-  const sys = process.env.LANG ?? process.env.LC_ALL ?? '';
-  if (/^ko/i.test(sys)) return 'ko';
-  // 5. 기본값 en
-  return 'en';
-}
+// src/cli/index.ts + src/i18n/index.ts
+// --lang → SEED_LANG → project/global config → English default
+const language = startupLanguage();
+setLanguage(language);
+await initializeLanguage(commandOptions.lang);
 ```
 
 ## 25.3 적용 대상 (코드 규칙)
@@ -1630,17 +1437,17 @@ export function resolveLang(explicit?: Language): Language {
 |------|-----------|------|
 | 배너/인사말/고정 메시지 | ✅ `t('...')` 필수 | renderer/prompts 전부 |
 | 명령어 설명 (`.description()`) | ✅ | help 출력 |
-| 에러 메시지 | ✅ | SeedError code 기반 t() |
+| 에러 메시지 | ✅ | CLI 오류 코드 기반 t() |
 | 인터랙티브 선택지/메뉴 | ✅ | |
 | AI 시스템 프롬프트 | ❌ (영문 고정) | 모델이 사용자 언어로 답변 |
-| AI 질문/요약 콘텐츠 | ❌ (언어 무관) | 사용자 입력 언어 따라감 |
+| AI 질문/요약 콘텐츠 | ❌ (입력 언어 기반) | 사용자의 최신 입력 언어를 따라감 |
 | Harvest 문서 (PRD/TRD) | ✅ 선택적 | `harvest prd --lang ko` 시 한글 구조 템플릿 |
 
 ## 25.4 Harvest 문서 언어 제어
 
 ```typescript
 // prd.ts 에서
-const docLang = await resolveLang(cliOptions.lang);   // harvest 명령의 --lang
+const docLang = cliOptions.lang ?? currentLanguage(); // harvest 명령의 --lang
 // PRD 구조 템플릿(섹션 제목 등)을 해당 언어로 렌더링
 // 단, 내용(AI 생성)은 사용자 결정/입력 언어 따라감
 ```
@@ -1648,7 +1455,7 @@ const docLang = await resolveLang(cliOptions.lang);   // harvest 명령의 --lan
 ## 25.5 수락 기준 (AC) — 기술
 
 - [ ] AC-TR-i18n-1: `SEED_LANG=ko` + `npx seed` 시 모든 고정 문구가 한국어
-- [ ] AC-TR-i18n-2: 플래그 無 + 시스템 `ko` 로케일 → 한국어 자동 감지
+- [ ] AC-TR-i18n-2: 플래그·환경변수·설정이 없으면 호스트 로케일과 무관하게 영어
 - [ ] AC-TR-i18n-3: 누락 키는 영어 → 키 이름 순으로 폴백
 - [ ] AC-TR-i18n-4: `--help` 전체가 선택 언어로 출력
 - [ ] AC-TR-i18n-5: 모든 UI 문자열이 `t()` 경유 (하드코딩 금지 — lint 규칙으로 강제)
@@ -1665,56 +1472,10 @@ const docLang = await resolveLang(cliOptions.lang);   // harvest 명령의 --lan
 >
 > PRD + TRD에 포함된 핵심 내용:
 > - Seed.md의 모든 기능에 대한 구조화된 요구사항
-> - AI 프로바이더 상세 설정 (OpenAI 계정연동/OAuth + API, Gemini API, We64 API, Custom Provider)
+> - AI 프로바이더 상세 설정 (OpenAI 계정연동/OAuth + API, Gemini API, Anthropic Claude API, Custom Provider)
 > - 타입 시스템, 저장 구조, 컨텍스트 아키텍처
 > - 테스트, 배포, 에러 처리, 보안 전략
-> - **OQ1~7 결정 반영** (텔레메트리 off, @seed-cli/seed, 무료+후원, npm 우선, 로컬 미지원, 다국어 en/ko, OpenAI Device Flow)
+> - **OQ1~7 결정 반영** (텔레메트리 off, @seed-cli/seed, 무료+후원, npm 우선, 로컬 미지원, 다국어 en/ko, OpenAI Local Browser OAuth)
 > - i18n 다국어 아키텍처 (§25)
 > - Phase 1~3 릴리스 로드맵
 ---
-
-# 25. i18n (다국어 지원) ★ 사용자 추가 요구사항 (OQ6)
-
-> **OQ6 결정:** 영어(기본) + 한국어 지원. UI 문구는 언어 팩, AI 콘텐츠는 언어 무관. PRD §6.19 (F-17) 참조.
-
-## 25.1 언어 팩 구조
-
-
-
-### 타입 안전한 키 구조
-
-{}
-
-## 25.2 언어 결정 우선순위
-
-
-
-## 25.3 적용 대상 (코드 규칙)
-
-| 대상 | i18n 적용 | 비고 |
-|------|-----------|------|
-| 배너/인사말/고정 메시지 | ✅  필수 | renderer/prompts 전부 |
-| 명령어 설명 () | ✅ | help 출력 |
-| 에러 메시지 | ✅ | SeedError code 기반 t() |
-| 인터랙티브 선택지/메뉴 | ✅ | |
-| AI 시스템 프롬프트 | ❌ (영문 고정) | 모델이 사용자 언어로 답변 |
-| AI 질문/요약 콘텐츠 | ❌ (언어 무관) | 사용자 입력 언어 따라감 |
-| Harvest 문서 (PRD/TRD) | ✅ 선택적 |  시 한글 구조 템플릿 |
-
-## 25.4 Harvest 문서 언어 제어
-
-
-
-## 25.5 수락 기준 (AC) — 기술
-
-- [ ] AC-TR-i18n-1:  +  시 모든 고정 문구가 한국어
-- [ ] AC-TR-i18n-2: 플래그 無 + 시스템  로케일 → 한국어 자동 감지
-- [ ] AC-TR-i18n-3: 누락 키는 영어 → 키 이름 순으로 폴백
-- [ ] AC-TR-i18n-4:  전체가 선택 언어로 출력
-- [ ] AC-TR-i18n-5: 모든 UI 문자열이  경유 (하드코딩 금지 — lint 규칙으로 강제)
-
-## 25.6 추가 언어 확장 (Phase 2+)
-
-- 언어 팩 파일만 추가하면 동작 (,  등)
-- 커뮤니티 기여 워크플로: 언어 팩 + 번역 리뷰 가이드 문서화
--  로 즉시 전환

@@ -4,7 +4,7 @@ import { exists, ensureDir } from './fs.js';
 export async function findSeedRoot(start = process.cwd()): Promise<string | null> {
   let current = path.resolve(start);
   while (true) {
-    if (await exists(path.join(current, '.seed', 'seed.json'))) return current;
+    if (await exists(path.join(current, '.seed', 'seed.json')) || await exists(path.join(current, '.seed', '.backup', 'seed.json.bak'))) return current;
     const parent = path.dirname(current);
     if (parent === current) return null;
     current = parent;
