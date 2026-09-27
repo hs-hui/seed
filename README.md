@@ -182,6 +182,4 @@ npm test
 npm run dev -- --help   # run the CLI from source with tsx
 ```
 
-Project docs: [PRD.md](./PRD.md) for product requirements, [TRD.md](./TRD.md) for technical architecture, and [Seed.md](./Seed.md) for the original product spec.
-
 MIT © Seed contributors

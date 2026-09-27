@@ -5,3 +5,14 @@ coverage/
 .env
 .DS_Store
 # Seed - idea growth tool
+
+# Internal planning docs - not needed for the published/release build
+PRD.md
+TRD.md
+Seed.md
+list.md
+
+# Local scratch/test directories left behind by manual smoke runs
+.diagnose-home/
+.tmp-smoke/
+.ux-test-cwd/

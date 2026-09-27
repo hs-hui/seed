@@ -182,7 +182,4 @@ npm test
 npm run dev -- --help   # tsx로 소스에서 바로 CLI 실행
 ```
 
-프로젝트 문서: 제품 요구사항은 [PRD.md](./PRD.md), 기술 아키텍처는 [TRD.md](./TRD.md), 원본 제품 기획서는 [Seed.md](./Seed.md)를 참고하세요.
-
 MIT © Seed contributors
-
