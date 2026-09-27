@@ -21,7 +21,7 @@ When you're ready, Seed turns the conversation into real documents: a product pl
 - **Nothing is lost.** Every answer, every direction you tried, and every decision you made is saved locally and can be revisited.
 - **You can always undo.** Trimmed-away ideas aren't deleted — they can be restored any time.
 - **Honest feedback.** Seed points out contradictions and gaps instead of just cheering you on.
-- **Works offline.** No AI account required — Seed includes a built-in local mode that works without any setup.
+- **Your choice of AI.** Connect OpenAI, Gemini, Claude, or any OpenAI-compatible provider — Seed never sends your idea anywhere without a provider you configured.
 
 ## Install
 
@@ -45,7 +45,7 @@ Just tell Seed what's on your mind:
 seed "An app that helps me remember to text my friends back"
 ```
 
-The first time you run Seed, it asks which language you'd like to use (English or Korean) and how you'd like Seed to think — using a connected AI account or Seed's built-in offline mode, which needs no setup at all. You can change either choice later with `seed config`.
+The first time you run Seed, it asks which language you'd like to use (English or Korean) and walks you through connecting an AI provider — an OpenAI account or API key, Gemini, Claude, or a custom OpenAI-compatible endpoint. Seed needs a connected provider to grow your idea. You can change your provider or language later with `seed config`.
 
 From there, just answer the questions Seed asks. There's no need to memorize commands — while you're talking with Seed, you can type things like `/branch`, `/bloom`, or `/harvest` to try other parts of the workflow, or just type `/help` to see what's available.
 
@@ -80,6 +80,8 @@ seed harvest all       # generate everything above at once
 
 Every harvest is saved to `.seed/harvest/` in your project folder, and running the same harvest again creates a new version (`prd-v1.md`, `prd-v2.md`, ...) instead of overwriting your previous one. Anything Seed doesn't know yet is marked `TBD` rather than invented.
 
+Seed checks the minimum recorded evidence for each document type. If something is missing, it lists what to add and writes nothing (`all` checks every type before writing). To save an incomplete version intentionally, use `seed harvest prd --draft` or `seed harvest all --draft`; incomplete documents are marked as drafts with their missing evidence.
+
 The `prompt` document is especially useful if you want an AI coding tool to build the project for you — hand it directly to Claude Code, Cursor, Codex, or a similar assistant.
 
 ## Keeping track of multiple ideas
@@ -105,9 +107,9 @@ seed history
 seed tree              # a visual map of your idea and its directions
 ```
 
-## Using your own AI
+## Connecting an AI provider
 
-By default, Seed works entirely offline using built-in local logic — no account or API key needed. If you'd like sharper, more natural questions, you can connect an AI provider:
+Seed needs a connected AI provider to ask questions and grow your idea — there's no offline mode. Connect one with:
 
 ```bash
 seed config
@@ -119,9 +121,8 @@ This opens a short setup wizard where you can choose:
 - **Google Gemini** — API key
 - **Anthropic Claude** — API key
 - **A custom provider** — any OpenAI-compatible API (OpenRouter, Groq, a self-hosted model, etc.)
-- **Local fallback** — no setup, works offline
 
-API keys are only ever read from environment variables and are never written to disk. You can switch providers at any time, and Seed always keeps the offline mode available as a safety net if a request fails.
+API keys are only ever read from environment variables and are never written to disk. You can switch providers at any time with `seed config use <provider>`. If a request fails — a bad key, a network problem, or the provider itself is down — Seed stops and tells you exactly what went wrong instead of silently guessing; just fix the issue and try again.
 
 ```bash
 seed config list        # see what's configured

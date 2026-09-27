@@ -1,0 +1,19 @@
+import type { OpenQuestion, SeedState } from '../../domain.js';
+import type { AIContext } from '../context-builder.js';
+
+export function growthQuestionPrompt(seed: SeedState, context: AIContext, scopedQuestions: OpenQuestion[], preferSimpleQuestion: boolean): string {
+  const answeredQuestions = scopedQuestions.filter((question) => question.status === 'answered').map((question) => question.question).join(' | ');
+  const previouslyAskedQuestions = scopedQuestions.filter((question) => question.status !== 'open').map((question) => question.question).join(' | ');
+  const history = (context.relevantHistory ?? []).map((event) => `${event.type}: ${event.message}`).join(' | ');
+  const research = (context.sunlightResearch ?? []).map((entry) => `${entry.title}: ${entry.summary}`).join(' | ');
+  const simpleMode = preferSimpleQuestion
+    ? ' The user found the previous question difficult. Ask an especially easy, concrete question about one person, one situation, one action, or one result; do not ask abstract planning questions and do not use technical or product-planning words.'
+    : '';
+  return `GROW_QUESTION\ncoreIdea: ${context.coreIdea}\noriginalIdea: ${seed.originalIdea}\nproblem: ${seed.problem}\nusers: ${seed.users.join(', ')}\ngoals: ${seed.goals.join(' | ')}\nconstraints: ${seed.constraints.join(' | ')}\nassumptions: ${seed.assumptions.join(' | ')}\ncurrentBranch: ${context.currentBranch ? `${context.currentBranch.name} — ${context.currentBranch.summary}` : 'none'}\nconfirmedDecisions: ${context.importantDecisions.map((decision) => decision.decision).join(' | ')}\nopenQuestions: ${context.openQuestions.map((question) => question.question).join(' | ')}\nansweredQuestions: ${answeredQuestions}\npreviouslyAskedQuestions: ${previouslyAskedQuestions}\ngrowthHistory: ${history}\nsunlightResearch: ${research}\nAsk exactly one next question about the most useful missing focus. Prioritize missing information in this order: user, problem, goal, constraint, assumption, then validation. Acknowledge the context naturally, avoid survey wording, avoid repeating answered or previously asked points, and keep it concise (one sentence, no examples, no lists, no “for example”, under 80 characters in Korean or 18 words in English). Use plain everyday language for a non-developer: never expose jargon such as assumption, validation, scope, signal, feasibility, differentiation, or maturity. If a concept is needed, explain it with simple words. Use the user's language and do not make decisions for them.${simpleMode}\nReturn JSON only: {"question":"one focused question","maturityDelta":1-8,"focus":"user|problem|goal|constraint|assumption|validation"}`;
+}
+
+export function growthUpdatePrompt(seed: SeedState, context: AIContext, answer: string): string {
+  const history = (context.relevantHistory ?? []).map((event) => `${event.type}: ${event.message}`).join(' | ');
+  const research = (context.sunlightResearch ?? []).map((entry) => `${entry.title}: ${entry.summary}`).join(' | ');
+  return `GROW_UPDATE\ncoreIdea: ${seed.coreIdea}\noriginalIdea: ${seed.originalIdea}\nproblem: ${seed.problem}\nusers: ${seed.users.join(', ')}\ngoals: ${seed.goals.join(' | ')}\nconstraints: ${seed.constraints.join(' | ')}\nassumptions: ${seed.assumptions.join(' | ')}\ncurrentBranch: ${context.currentBranch ? `${context.currentBranch.name} — ${context.currentBranch.summary}` : 'none'}\ngrowthHistory: ${history}\nsunlightResearch: ${research}\nlatestAnswer: ${answer}\nReflect only what the user said; never turn a request for help, a question about Seed, or uncertainty into a product decision. Keep the updated summary and reason in plain everyday language for a non-developer. Return valid JSON only: {"updatedSummary":"concise updated idea","questionReason":"why this update matters","contradictionsDetected":["only real contradictions"],"suggestions":["optional next-step suggestions"],"maturityDelta":1-8}`;
+}

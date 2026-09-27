@@ -2,14 +2,13 @@ import { SeedState, now, OpenQuestion } from '../domain.js';
 import { randomUUID } from 'node:crypto';
 import { SeedStore } from '../storage/store.js';
 import { addConversation, addEvent } from './seed-manager.js';
-import { growthUpdate, nextQuestion, dimensionsFor, inferProviderLanguage, isBeginnerFriendlyQuestion } from '../ai/provider.js';
-import type { ProviderLanguage } from '../ai/provider.js';
+import { coreAI } from './ai.js';
+import type { GrowthUpdate, ProviderLanguage } from '../ai/contracts.js';
 import type { ContextExtras } from '../ai/context-builder.js';
 import { calculateMaturity, statusForMaturity } from './maturity.js';
 import { detectGrowthInputIntent } from '../ai/input-intent.js';
 import path from 'node:path';
 import { withKeyedLock } from '../utils/fs.js';
-
 function requiredFocus(seed: SeedState): 'user' | 'problem' | 'goal' | 'constraint' | 'assumption' | 'validation' {
   if (!seed.users.length) return 'user';
   if (!seed.problem) return 'problem';
@@ -116,8 +115,8 @@ async function askGrowthQuestionUnlocked(store: SeedStore, seed: SeedState, prov
     // A pending question can predate the current beginner-language guards.
     // Replace it on resume instead of showing stale jargon or an abstract
     // prompt that the user already found difficult.
-    const pendingLanguage = inferProviderLanguage(language, [seed.originalIdea, seed.coreIdea, pending.question]);
-    if (!isBeginnerFriendlyQuestion(pending.question, pendingLanguage)) {
+    const pendingLanguage = coreAI.inferProviderLanguage(language, [seed.originalIdea, seed.coreIdea, pending.question]);
+    if (!coreAI.isBeginnerFriendlyQuestion(pending.question, pendingLanguage)) {
       const cancelledAt = now();
       const openQuestions = seed.openQuestions.map((question) => question.id === pending.id
         ? { ...question, status: 'cancelled' as const, cancelledAt } : question);
@@ -138,7 +137,7 @@ async function askGrowthQuestionUnlocked(store: SeedStore, seed: SeedState, prov
     }
     return pending.question;
   }
-  const suggestion = await nextQuestion(seed, providerId, model, language, recentConversation, currentBranch, contextExtras);
+  const suggestion = await coreAI.nextQuestion(seed, providerId, model, language, recentConversation, currentBranch, contextExtras);
   await addConversation(store, { seedId: seed.id, ...(branchId ? { branchId } : {}), role: 'assistant', type: 'question', content: suggestion.question,
     ...(suggestion.focus ? { metadata: { focus: suggestion.focus } } : {}) });
   const existing = seed.openQuestions.find((question) => question.status === 'open' && question.question === suggestion.question && question.branchId === branchId);
@@ -154,7 +153,7 @@ export async function askGrowthQuestion(store: SeedStore, seed: SeedState, provi
   return withKeyedLock(path.join(store.base, 'seed.json'), () => askGrowthQuestionUnlocked(store, seed, providerId, branchId, model, language, preferSimpleQuestion));
 }
 
-async function applyGrowthUnlocked(store: SeedStore, seed: SeedState, answer: string, providerId?: string, branchId?: string, language: ProviderLanguage = 'en', model?: string): Promise<{ before: string; after: string; seed: SeedState; update: Awaited<ReturnType<typeof growthUpdate>> }> {
+async function applyGrowthUnlocked(store: SeedStore, seed: SeedState, answer: string, providerId?: string, branchId?: string, language: ProviderLanguage = 'en', model?: string): Promise<{ before: string; after: string; seed: SeedState; update: GrowthUpdate }> {
   seed = await store.load();
   if (seed.status === 'dormant') throw new Error('seed-dormant');
   if (!answer.trim()) throw new Error('answer-required');
@@ -180,7 +179,7 @@ async function applyGrowthUnlocked(store: SeedStore, seed: SeedState, answer: st
     : !entry.branchId);
   const asked = [...conversations].reverse().find((entry) => entry.role === 'assistant' && entry.type === 'question' && entry.branchId === branchId);
   const askedQuestion = seed.openQuestions.find((question) => question.question === asked?.content && question.status === 'open' && question.branchId === branchId);
-  const update = await growthUpdate(workingSeed, trimmed, providerId, model, language, conversations, currentBranch, { relevantHistory, sunlightResearch });
+  const update = await coreAI.growthUpdate(workingSeed, trimmed, providerId, model, language, conversations, currentBranch, { relevantHistory, sunlightResearch });
   const openQuestions = seed.openQuestions.map((question) => question.question === asked?.content && question.status === 'open' && question.branchId === branchId
     ? { ...question, status: 'answered' as const, answer: trimmed, answeredAt: now() } : question);
   const askedText = asked?.content.toLowerCase() ?? '';
@@ -208,7 +207,7 @@ async function applyGrowthUnlocked(store: SeedStore, seed: SeedState, answer: st
     : { ...seed, coreIdea: update.updatedSummary, problem, users, goals, constraints, assumptions, openQuestions,
       maturity: seed.maturity, status: seed.status === 'seedling' ? 'growing' : seed.status, updatedAt: now() };
   if (!currentBranch) {
-    updated.maturityDimensions = dimensionsFor(updated, resolvedFocus, update.maturityDelta, language);
+    updated.maturityDimensions = coreAI.dimensionsFor(updated, resolvedFocus, update.maturityDelta, language);
     // A completed, non-empty turn is evidence of progress. The dimension
     // average remains the source of truth, but rounding/another dimension's
     // low score must not make a useful answer look like it made no progress.
@@ -239,7 +238,7 @@ async function applyGrowthUnlocked(store: SeedStore, seed: SeedState, answer: st
   return { before, after: update.updatedSummary, seed: updated, update };
 }
 
-export async function applyGrowth(store: SeedStore, seed: SeedState, answer: string, providerId?: string, branchId?: string, language: ProviderLanguage = 'en', model?: string): Promise<{ before: string; after: string; seed: SeedState; update: Awaited<ReturnType<typeof growthUpdate>> }> {
+export async function applyGrowth(store: SeedStore, seed: SeedState, answer: string, providerId?: string, branchId?: string, language: ProviderLanguage = 'en', model?: string): Promise<{ before: string; after: string; seed: SeedState; update: GrowthUpdate }> {
   return withKeyedLock(path.join(store.base, 'seed.json'), () => applyGrowthUnlocked(store, seed, answer, providerId, branchId, language, model));
 }
 

@@ -1,59 +1,18 @@
 import os from 'node:os';
 import path from 'node:path';
-import { appendJsonLine, atomicWrite, backup, ensureDir, exists, listFiles, readJson } from '../utils/fs.js';
+import { appendJsonLine, atomicWrite, ensureDir, exists, listFiles, readJson } from '../utils/fs.js';
 import { ensureSeedRoot, findSeedRoot } from '../utils/path.js';
-import { Branch, ConversationEntry, Decision, GrowthEvent, HarvestResult, ResearchEntry, SeedState, branchSchema, conversationSchema, decisionSchema, growthEventSchema, harvestResultSchema, researchSchema, seedSchema, now } from '../domain.js';
-
-const seedSaveQueues = new Map<string, Promise<void>>();
-function seedSaveKey(filePath: string): string {
-  const resolved = path.resolve(filePath);
-  return process.platform === 'win32' ? resolved.toLocaleLowerCase() : resolved;
-}
+import { Branch, ConversationEntry, Decision, GrowthEvent, HarvestResult, ResearchEntry, SeedState, branchSchema, conversationSchema, decisionSchema, growthEventSchema, harvestResultSchema, researchSchema } from '../domain.js';
+import { assertBranchLineage } from '../domain/branch-invariants.js';
+import { SeedStateRepository } from './seed-state-repository.js';
 
 export class SeedStore {
-  constructor(public readonly root: string) {}
+  private readonly state: SeedStateRepository;
+  constructor(public readonly root: string) { this.state = new SeedStateRepository(path.join(root, '.seed')); }
   get base(): string { return path.join(this.root, '.seed'); }
-  async hasSeed(): Promise<boolean> {
-    if (await exists(path.join(this.base, 'seed.json'))) return true;
-    // Treat a valid rolling backup as an existing Seed too. This prevents a
-    // missing current file from allowing `seed "new idea"` to overwrite a
-    // recoverable project.
-    try { seedSchema.parse(await readJson<unknown>(path.join(this.base, '.backup', 'seed.json.bak'))); return true; }
-    catch { return false; }
-  }
-  async load(): Promise<SeedState> {
-    const file = path.join(this.base, 'seed.json');
-    try { return seedSchema.parse(await readJson<unknown>(file)); }
-    catch (error) {
-      // A half-written or manually edited state file should not make an idea
-      // disappear when the rolling backup is still valid. Restore only after
-      // the backup passes the same schema check; otherwise preserve the
-      // original parse error for the caller to report.
-      const backupFile = path.join(this.base, '.backup', 'seed.json.bak');
-      try {
-        const recovered = seedSchema.parse(await readJson<unknown>(backupFile));
-        await atomicWrite(file, `${JSON.stringify(recovered, null, 2)}\n`);
-        return recovered;
-      } catch { throw error; }
-    }
-  }
-  async save(seed: SeedState): Promise<void> {
-    const validated = seedSchema.parse(seed);
-    const file = path.join(this.base, 'seed.json');
-    const backupFile = path.join(this.base, '.backup', 'seed.json.bak');
-    // Keep the rolling backup and its corresponding replacement in the same
-    // queue. Otherwise overlapping saves can copy an older version after a
-    // newer write has already started, weakening recovery guarantees.
-    const key = seedSaveKey(file);
-    const previous = seedSaveQueues.get(key) ?? Promise.resolve();
-    const operation = previous.catch(() => undefined).then(async () => {
-      await backup(file, backupFile);
-      await atomicWrite(file, `${JSON.stringify({ ...validated, updatedAt: now() }, null, 2)}\n`);
-    });
-    seedSaveQueues.set(key, operation);
-    try { await operation; }
-    finally { if (seedSaveQueues.get(key) === operation) seedSaveQueues.delete(key); }
-  }
+  hasSeed(): Promise<boolean> { return this.state.exists(); }
+  load(): Promise<SeedState> { return this.state.load(); }
+  save(seed: SeedState): Promise<void> { return this.state.save(seed); }
   async create(seed: SeedState): Promise<void> {
     await Promise.all(['conversations', 'branches', 'decisions', 'research', 'harvest', 'harvest/results', 'history', '.backup'].map((directory) => ensureDir(path.join(this.base, directory))));
     await this.save(seed);
@@ -70,6 +29,7 @@ export class SeedStore {
   }
   async saveBranch(branch: Branch): Promise<void> {
     const validated = branchSchema.parse(branch);
+    if (validated.parentBranchId) assertBranchLineage(validated, await this.branches(validated.seedId));
     await atomicWrite(path.join(this.base, 'branches', `${validated.id}.json`), `${JSON.stringify(validated, null, 2)}\n`);
   }
   async branches(seedId: string): Promise<Branch[]> {
@@ -125,9 +85,7 @@ export type ProviderConfig = {
   defaultModel: string; baseUrl?: string; enabled: boolean; connectionMode?: 'api-key' | 'oauth';
   temperature?: number; maxTokens?: number;
 };
-const defaultConfig: GlobalConfig = { version: 1, activeProvider: 'local', providers: [
-  { id: 'local', name: 'Local fallback', type: 'custom', defaultModel: 'rule-based', enabled: true },
-] };
+const defaultConfig: GlobalConfig = { version: 1, activeProvider: '', providers: [] };
 function sanitizeProvider(provider: ProviderConfig): ProviderConfig {
   const safe = { ...provider } as Record<string, unknown>;
   // Keys and bearer tokens belong in environment variables or the dedicated
@@ -141,7 +99,7 @@ function normalizeConfig(config: GlobalConfig): GlobalConfig {
     .map((provider) => {
       if (!provider || typeof provider !== 'object') return undefined;
       const value = sanitizeProvider(provider);
-      if (!value.id || !value.name || !value.defaultModel || !['openai', 'gemini', 'anthropic', 'custom'].includes(value.type)
+      if (!value.id || value.id === 'local' || !value.name || !value.defaultModel || !['openai', 'gemini', 'anthropic', 'custom'].includes(value.type)
         || (value.enabled !== undefined && typeof value.enabled !== 'boolean')
         || (value.baseUrl !== undefined && typeof value.baseUrl !== 'string')
         || (value.connectionMode !== undefined && !['api-key', 'oauth'].includes(value.connectionMode))) return undefined;
@@ -153,19 +111,20 @@ function normalizeConfig(config: GlobalConfig): GlobalConfig {
       } as ProviderConfig;
     })
     .filter((provider): provider is ProviderConfig => Boolean(provider));
-  const withLocal = providers.some((provider) => provider.id === 'local')
-    ? providers
-    : [{ ...defaultConfig.providers[0]! }, ...providers];
-  const activeProvider = typeof config.activeProvider === 'string' && withLocal.some((provider) => provider.id === config.activeProvider)
+  // No local fallback exists anymore. An AI provider must be explicitly
+  // configured; an unknown or missing activeProvider is left unset so
+  // callers surface a clear "connect a provider" error instead of silently
+  // routing to deterministic offline content.
+  const activeProvider = typeof config.activeProvider === 'string' && providers.some((provider) => provider.id === config.activeProvider)
     ? config.activeProvider
-    : 'local';
+    : '';
   const language = config.lang === 'ko' || config.lang === 'en' ? config.lang : undefined;
   return {
     ...config,
     version: Number.isFinite(config.version) ? config.version : defaultConfig.version,
     ...(language ? { lang: language } : { lang: undefined }),
     activeProvider,
-    providers: withLocal.map((provider) => {
+    providers: providers.map((provider) => {
       const safe = sanitizeProvider(provider);
       return safe.type === 'openai' && safe.connectionMode === 'oauth' && safe.defaultModel === 'gpt-5.3-codex'
         ? { ...safe, defaultModel: 'gpt-5.6-luna' } : safe;

@@ -1,4 +1,4 @@
-import { SunlightSource } from '../ai/provider.js';
+import type { SunlightSource } from '../ai/provider.js';
 
 /** Best-effort public search used only when the user opts into `--web`. */
 export async function webSources(query: string): Promise<SunlightSource[]> {

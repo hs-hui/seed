@@ -11,6 +11,7 @@ PRD.md
 TRD.md
 Seed.md
 list.md
+docs/architecture.md
 
 # Local scratch/test directories left behind by manual smoke runs
 .diagnose-home/

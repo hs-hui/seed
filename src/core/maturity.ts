@@ -1,12 +1,15 @@
 import { OpenQuestion, SeedState, seedStatuses } from '../domain.js';
 
-export function calculateMaturity(seed: SeedState): number {
+export function maturityBreakdown(seed: SeedState): { base: number; penalty: number; bonus: number; score: number } {
   const base = seed.maturityDimensions.length
     ? seed.maturityDimensions.reduce((sum, d) => sum + d.score, 0) / seed.maturityDimensions.length
     : seed.maturity;
   const penalty = seed.openQuestions.filter((q) => q.status === 'open' && q.importance === 'high').length * 5;
   const bonus = Math.min(seed.decisions.filter((d) => d.confirmedByUser).length * 2, 10);
-  return Math.max(0, Math.min(100, Math.round(base - penalty + bonus)));
+  return { base, penalty, bonus, score: Math.max(0, Math.min(100, Math.round(base - penalty + bonus))) };
+}
+export function calculateMaturity(seed: SeedState): number {
+  return maturityBreakdown(seed).score;
 }
 export function statusForMaturity(maturity: number): SeedState['status'] {
   if (maturity <= 20) return 'seedling';

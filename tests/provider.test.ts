@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { DEFAULT_OPENAI_MODEL, LocalProvider, OpenAICompatibleProvider, classifyGrowthInput, evaluateMaturity, getProvider, growthUpdate, nextQuestion, providerKey, testProviderConnection, waterInsight } from '../src/ai/provider.js';
+import { DEFAULT_OPENAI_MODEL, OpenAICompatibleProvider, classifyGrowthInput, evaluateMaturity, getProvider, growthUpdate, inferProviderLanguage, nextQuestion, providerKey, testProviderConnection, waterInsight } from '../src/ai/provider.js';
+import { detectGrowthInputIntent } from '../src/ai/input-intent.js';
 import { createSeed } from '../src/domain.js';
 import { askGrowthQuestion, applyGrowth } from '../src/core/growth.js';
 import { plant } from '../src/core/seed-manager.js';
@@ -11,6 +12,31 @@ import { addCodexOriginator, getOpenAIToken } from '../src/ai/openai-oauth.js';
 import { buildContext } from '../src/ai/context-builder.js';
 
 describe('AI language handling', () => {
+  /**
+   * Run an assertion with a configured OpenAI provider and a scripted fetch
+   * response. Replaces the old local-provider test harness now that Seed
+   * requires a real connected AI provider for every AI-backed call.
+   */
+  async function withMockedOpenAI<T>(responseContent: string, run: () => Promise<T>): Promise<T> {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'seed-mock-openai-'));
+    const previousHome = process.env.SEED_HOME;
+    const previousKey = process.env.SEED_OPENAI_API_KEY;
+    const originalFetch = globalThis.fetch;
+    process.env.SEED_HOME = root;
+    process.env.SEED_OPENAI_API_KEY = 'test-key';
+    await writeFile(path.join(root, 'config.json'), JSON.stringify({ version: 1, activeProvider: 'openai', providers: [{ id: 'openai', name: 'OpenAI', type: 'openai', defaultModel: 'test-model', enabled: true }] }));
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: responseContent } }] }), { status: 200 })) as typeof fetch;
+    try {
+      return await run();
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (previousHome === undefined) delete process.env.SEED_HOME; else process.env.SEED_HOME = previousHome;
+      if (previousKey === undefined) delete process.env.SEED_OPENAI_API_KEY; else process.env.SEED_OPENAI_API_KEY = previousKey;
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+
+
   it('keeps the requested OpenAI default model', () => {
     expect(DEFAULT_OPENAI_MODEL).toBe('gpt-5.6-luna');
   });
@@ -77,19 +103,17 @@ describe('AI language handling', () => {
     }
   });
 
-  it('keeps obvious local help replies out of the idea summary', async () => {
-    await expect(classifyGrowthInput('음...', '무엇을 만들까요?', 'local', undefined, 'ko')).resolves.toBe('change-question');
-    await expect(classifyGrowthInput('전 이 질문에 어떻게 답해야 할지 모르겠어요', '무엇을 만들까요?', 'local', undefined, 'ko')).resolves.toBe('change-question');
-    await expect(classifyGrowthInput('어렵다', '무엇을 만들까요?', 'local', undefined, 'ko')).resolves.toBe('change-question');
-    await expect(classifyGrowthInput('도와주세요', '무엇을 만들까요?', 'local', undefined, 'ko')).resolves.toBe('change-question');
-    await expect(classifyGrowthInput('잠깐 생각해볼게요', '무엇을 만들까요?', 'local', undefined, 'ko')).resolves.toBe('pause');
-    await expect(classifyGrowthInput('다음에 생각해볼게요', '무엇을 만들까요?', 'local', undefined, 'ko')).resolves.toBe('pause');
-    await expect(classifyGrowthInput('학생이 매일 단어를 복습해요', '누가 쓸까요?', 'local', undefined, 'ko')).resolves.toBe('answer');
-    await expect(classifyGrowthInput('응', '이 아이디어를 써볼까요?', 'local', undefined, 'ko')).resolves.toBe('answer');
-    await expect(classifyGrowthInput('yes', 'Would you try it?', 'local', undefined, 'en')).resolves.toBe('answer');
+  it('keeps obvious offline-safety-net replies out of the idea summary', () => {
+    expect(detectGrowthInputIntent('음...')).toBe('change-question');
+    expect(detectGrowthInputIntent('전 이 질문에 어떻게 답해야 할지 모르겠어요')).toBe('change-question');
+    expect(detectGrowthInputIntent('어렵다')).toBe('change-question');
+    expect(detectGrowthInputIntent('도와주세요')).toBe('change-question');
+    expect(detectGrowthInputIntent('잠깐 생각해볼게요')).toBe('pause');
+    expect(detectGrowthInputIntent('다음에 생각해볼게요')).toBe('pause');
+    expect(detectGrowthInputIntent('학생이 매일 단어를 복습해요')).toBe('answer');
   });
 
-  it('recognizes natural beginner meta replies beyond fixed examples', async () => {
+  it('recognizes natural beginner meta replies beyond fixed examples', () => {
     const cases = [
       '너무 어려워 다른질문',
       '어려워요, 다른 질문으로 해줘',
@@ -140,29 +164,29 @@ describe('AI language handling', () => {
       'Can we skip this question?',
       "I'm not sure what you're asking",
     ];
-    for (const value of cases) await expect(classifyGrowthInput(value, 'What should we try first?', 'local', undefined, value.includes('I ') || value.includes('Please') || value.includes('This') ? 'en' : 'ko')).resolves.toBe('change-question');
-    await expect(classifyGrowthInput('일단 나중에 답할게', 'What should we try first?', 'local', undefined, 'ko')).resolves.toBe('pause');
-    await expect(classifyGrowthInput('지금은 말고 나중에', 'What should we try first?', 'local', undefined, 'ko')).resolves.toBe('pause');
-    await expect(classifyGrowthInput("I'll think about it", 'What should we try first?', 'local', undefined, 'en')).resolves.toBe('pause');
-    await expect(classifyGrowthInput('잠시 후에 답할게', 'What should we try first?', 'local', undefined, 'ko')).resolves.toBe('pause');
-    await expect(classifyGrowthInput('생각 좀 해볼게요', 'What should we try first?', 'local', undefined, 'ko')).resolves.toBe('pause');
-    await expect(classifyGrowthInput('답변을 생각해볼게요', 'What should we try first?', 'local', undefined, 'ko')).resolves.toBe('pause');
-    await expect(classifyGrowthInput('give me a second', 'What should we try first?', 'local', undefined, 'en')).resolves.toBe('pause');
-    await expect(classifyGrowthInput('I need to think about this', 'What should we try first?', 'local', undefined, 'en')).resolves.toBe('pause');
-    await expect(classifyGrowthInput('나는 학생들이 공부를 어려워하는 걸 돕고 싶어', '무엇을 만들까요?', 'local', undefined, 'ko')).resolves.toBe('answer');
-    await expect(classifyGrowthInput('학생들이 질문을 어려워한다', '무엇을 만들까요?', 'local', undefined, 'ko')).resolves.toBe('answer');
-    await expect(classifyGrowthInput('이 앱은 다른 질문을 제공한다', '무엇을 만들까요?', 'local', undefined, 'ko')).resolves.toBe('answer');
-    await expect(classifyGrowthInput('AI가 어려운 질문을 판단하는 앱', '무엇을 만들까요?', 'local', undefined, 'ko')).resolves.toBe('answer');
-    await expect(classifyGrowthInput('사용자가 어려워하는 질문을 다른 질문으로 제공하는 앱', '무엇을 만들까요?', 'local', undefined, 'ko')).resolves.toBe('answer');
-    await expect(classifyGrowthInput('앱이 어려운 질문을 쉽게 바꿔준다', '무엇을 만들까요?', 'local', undefined, 'ko')).resolves.toBe('answer');
-    await expect(classifyGrowthInput('이 앱은 학생들이 어려운 질문을 쉽게 이해하게 해', '무엇을 만들까요?', 'local', undefined, 'ko')).resolves.toBe('answer');
-    await expect(classifyGrowthInput('학생들이 이 질문을 어려워해', '무엇을 만들까요?', 'local', undefined, 'ko')).resolves.toBe('answer');
-    await expect(classifyGrowthInput('질문을 어려워하는 학생을 돕고 싶어', '무엇을 만들까요?', 'local', undefined, 'ko')).resolves.toBe('answer');
-    await expect(classifyGrowthInput('The app provides an easier question', 'What should we build?', 'local', undefined, 'en')).resolves.toBe('answer');
-    await expect(classifyGrowthInput('Students find this question hard', 'What should we build?', 'local', undefined, 'en')).resolves.toBe('answer');
+    for (const value of cases) expect(detectGrowthInputIntent(value)).toBe('change-question');
+    expect(detectGrowthInputIntent('일단 나중에 답할게')).toBe('pause');
+    expect(detectGrowthInputIntent('지금은 말고 나중에')).toBe('pause');
+    expect(detectGrowthInputIntent("I'll think about it")).toBe('pause');
+    expect(detectGrowthInputIntent('잠시 후에 답할게')).toBe('pause');
+    expect(detectGrowthInputIntent('생각 좀 해볼게요')).toBe('pause');
+    expect(detectGrowthInputIntent('답변을 생각해볼게요')).toBe('pause');
+    expect(detectGrowthInputIntent('give me a second')).toBe('pause');
+    expect(detectGrowthInputIntent('I need to think about this')).toBe('pause');
+    expect(detectGrowthInputIntent('나는 학생들이 공부를 어려워하는 걸 돕고 싶어')).toBe('answer');
+    expect(detectGrowthInputIntent('학생들이 질문을 어려워한다')).toBe('answer');
+    expect(detectGrowthInputIntent('이 앱은 다른 질문을 제공한다')).toBe('answer');
+    expect(detectGrowthInputIntent('AI가 어려운 질문을 판단하는 앱')).toBe('answer');
+    expect(detectGrowthInputIntent('사용자가 어려워하는 질문을 다른 질문으로 제공하는 앱')).toBe('answer');
+    expect(detectGrowthInputIntent('앱이 어려운 질문을 쉽게 바꿔준다')).toBe('answer');
+    expect(detectGrowthInputIntent('이 앱은 학생들이 어려운 질문을 쉽게 이해하게 해')).toBe('answer');
+    expect(detectGrowthInputIntent('학생들이 이 질문을 어려워해')).toBe('answer');
+    expect(detectGrowthInputIntent('질문을 어려워하는 학생을 돕고 싶어')).toBe('answer');
+    expect(detectGrowthInputIntent('The app provides an easier question')).toBe('answer');
+    expect(detectGrowthInputIntent('Students find this question hard')).toBe('answer');
   });
 
-  it('uses the local safety net when a configured classifier is unavailable', async () => {
+  it('fails clearly instead of silently using an offline safety net when the classifier is unreachable', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-input-intent-offline-'));
     const previousHome = process.env.SEED_HOME;
     const previousKey = process.env.SEED_OPENAI_API_KEY;
@@ -172,8 +196,7 @@ describe('AI language handling', () => {
     await writeFile(path.join(root, 'config.json'), JSON.stringify({ version: 1, activeProvider: 'openai', providers: [{ id: 'openai', name: 'OpenAI', type: 'openai', defaultModel: 'test-model', enabled: true }] }));
     globalThis.fetch = vi.fn(async () => { throw new Error('offline'); }) as typeof fetch;
     try {
-      await expect(classifyGrowthInput('Please give me an easier question', 'What should we build?', 'openai', undefined, 'en')).resolves.toBe('change-question');
-      await expect(classifyGrowthInput('students want shorter study sessions', 'What should we build?', 'openai', undefined, 'en')).resolves.toBe('answer');
+      await expect(classifyGrowthInput('Please give me an easier question', 'What should we build?', 'openai', undefined, 'en')).rejects.toThrow();
     } finally {
       globalThis.fetch = originalFetch;
       if (previousHome === undefined) delete process.env.SEED_HOME; else process.env.SEED_HOME = previousHome;
@@ -265,17 +288,16 @@ describe('AI language handling', () => {
     }
   });
 
-  it('recovers to the local provider when config entries are malformed', async () => {
+  it('discards malformed config entries and leaves the provider unset', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-config-invalid-'));
     const previousHome = process.env.SEED_HOME;
     process.env.SEED_HOME = root;
     await writeFile(path.join(root, 'config.json'), JSON.stringify({ version: 'old', lang: 'fr', activeProvider: 'missing', providers: [null, { id: 'broken', type: 'unknown' }] }));
     try {
       const config = await loadConfig();
-      expect(config.activeProvider).toBe('local');
+      expect(config.activeProvider).toBe('');
       expect(config.lang).toBeUndefined();
-      expect(config.providers[0]?.id).toBe('local');
-      expect(config.providers.every((provider) => provider.id && provider.defaultModel)).toBe(true);
+      expect(config.providers).toEqual([]);
     } finally {
       if (previousHome === undefined) delete process.env.SEED_HOME; else process.env.SEED_HOME = previousHome;
       await rm(root, { recursive: true, force: true });
@@ -296,7 +318,7 @@ describe('AI language handling', () => {
     }
   });
 
-  it('keeps growth usable when a configured provider is offline', async () => {
+  it('fails clearly instead of silently falling back when a configured provider is offline', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-provider-offline-'));
     const previousHome = process.env.SEED_HOME;
     const previousKey = process.env.SEED_OPENAI_API_KEY;
@@ -307,10 +329,8 @@ describe('AI language handling', () => {
     globalThis.fetch = vi.fn(async () => { throw new Error('offline'); }) as typeof fetch;
     try {
       const seed = createSeed('A study app');
-      const question = await nextQuestion(seed, undefined, undefined, 'en');
-      expect(question.question).toContain('Who');
-      const update = await growthUpdate(seed, 'Students need a shorter study session.', undefined, undefined, 'en');
-      expect(update.updatedSummary).toContain('Students need a shorter study session.');
+      await expect(nextQuestion(seed, undefined, undefined, 'en')).rejects.toThrow();
+      await expect(growthUpdate(seed, 'Students need a shorter study session.', undefined, undefined, 'en')).rejects.toThrow();
     } finally {
       globalThis.fetch = originalFetch;
       if (previousHome === undefined) delete process.env.SEED_HOME; else process.env.SEED_HOME = previousHome;
@@ -319,15 +339,15 @@ describe('AI language handling', () => {
     }
   });
 
-  it('keeps offline fallback questions short after a long user description', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'seed-question-offline-length-'));
+  it('replaces an overlong or jargon-heavy question with a short safe one', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'seed-question-length-'));
     const previousHome = process.env.SEED_HOME;
     const previousKey = process.env.SEED_OPENAI_API_KEY;
     const originalFetch = globalThis.fetch;
     process.env.SEED_HOME = root;
     process.env.SEED_OPENAI_API_KEY = 'test-key';
     await writeFile(path.join(root, 'config.json'), JSON.stringify({ version: 1, activeProvider: 'openai', providers: [{ id: 'openai', name: 'OpenAI', type: 'openai', defaultModel: 'test-model', enabled: true }] }));
-    globalThis.fetch = vi.fn(async () => { throw new Error('offline'); }) as typeof fetch;
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: '{"question":"백엔드 API와 배포 전략을 어떻게 검증할 가정으로 설계하시겠어요?","maturityDelta":3,"focus":"problem"}' } }] }), { status: 200 })) as typeof fetch;
     try {
       const base = createSeed('암기 앱');
       const seed = { ...base, users: ['매일 영어 단어를 외우지만 시간이 부족하고 무엇부터 해야 할지 몰라 여러 앱을 돌아다니는 학생 사용자'], openQuestions: [] };
@@ -377,87 +397,71 @@ describe('AI language handling', () => {
     expect(new URL(url).searchParams.get('originator')).toBe('codex_cli_rs');
   });
 
-  it('returns Korean local fallback suggestions when Korean is selected', async () => {
-    const provider = new LocalProvider('ko');
-    const result = JSON.parse(await provider.ask('GROW_QUESTION\nproblem: \nusers: \nopenQuestions: ')) as { question: string };
-    expect(result.question).toContain('아이디어');
-    expect(await provider.chat([{ role: 'user', content: 'GROW_UPDATE\ncoreIdea: x\nlatestAnswer: hello' }])).toContain('hello');
-    const chunks: string[] = []; for await (const chunk of provider.stream('hello')) chunks.push(chunk);
-    expect(chunks.length).toBe(1); expect((await provider.testConnection()).success).toBe(true); expect(await provider.listModels()).toEqual(['rule-based']);
-  });
-
-  it('returns the structured grow update contract in local mode', async () => {
-    const provider = new LocalProvider('ko');
-    const result = JSON.parse(await provider.ask('GROW_UPDATE\ncoreIdea: 공부앱\nlatestAnswer: 학생이 매일 계획을 지켜요')) as {
-      updatedSummary: string; questionReason: string; contradictionsDetected: string[]; suggestions: string[]; maturityDelta: number;
-    };
-    expect(result.updatedSummary).toContain('학생이 매일 계획을 지켜요');
-    expect(result.questionReason).toContain('반영');
-    expect(result.contradictionsDetected).toEqual([]);
-    expect(result.suggestions).toEqual([]);
-    expect(result.maturityDelta).toBeGreaterThanOrEqual(1);
-  });
-
-  it('flags only explicit exclusive-scope contradictions in local mode', async () => {
+  it('flags only explicit exclusive-scope contradictions detected locally on top of a provider response', async () => {
     const seed = { ...createSeed('A study app'), constraints: ['웹만 지원'] };
-    const conflict = await growthUpdate(seed, '모바일 앱도 필요해요', 'local', undefined, 'ko');
+    const responseFor = (summary: string): string => JSON.stringify({ updatedSummary: summary, questionReason: '반영했습니다', contradictionsDetected: [], suggestions: [], maturityDelta: 3 });
+    const conflict = await withMockedOpenAI(responseFor('모바일 앱도 필요해요'), () => growthUpdate(seed, '모바일 앱도 필요해요', 'openai', undefined, 'ko'));
     expect(conflict.contradictionsDetected[0]).toContain('웹 전용');
-    const compatible = await growthUpdate(seed, '웹에서 빠르게 확인해요', 'local', undefined, 'ko');
+    const compatible = await withMockedOpenAI(responseFor('웹에서 빠르게 확인해요'), () => growthUpdate(seed, '웹에서 빠르게 확인해요', 'openai', undefined, 'ko'));
     expect(compatible.contradictionsDetected).toEqual([]);
   });
 
-  it('evaluates all maturity dimensions without an API key in local mode', async () => {
-    const result = await evaluateMaturity(createSeed('A small study app'), 'local', undefined, 'en');
+  it('evaluates all maturity dimensions from a provider response', async () => {
+    const dims = ['problem', 'user', 'core value', 'differentiation', 'scope', 'feasibility', 'motivation', 'confidence'].map((name) => ({ name, score: 40, reason: 'evidence' }));
+    const response = JSON.stringify({ dimensions: dims, clear: [], uncertain: dims.map((d) => d.name), explore: ['What matters most?'] });
+    const result = await withMockedOpenAI(response, () => evaluateMaturity(createSeed('A small study app'), 'openai', undefined, 'en'));
     expect(result.dimensions).toHaveLength(8);
     expect(result.clear).toEqual(expect.any(Array));
     expect(result.uncertain).toEqual(expect.any(Array));
     expect(result.explore).toEqual(expect.any(Array));
   });
 
-  it('localizes maturity evidence reasons for Korean output', async () => {
-    const result = await evaluateMaturity({ ...createSeed('공부 앱'), problem: '집중하기 어렵다' }, 'local', undefined, 'ko');
+  it('uses a Korean-language reason from the provider response', async () => {
+    const dims = ['problem', 'user', 'core value', 'differentiation', 'scope', 'feasibility', 'motivation', 'confidence'].map((name) => ({ name, score: 70, reason: '현재 Seed 상태에서 근거가 확인됩니다.' }));
+    const response = JSON.stringify({ dimensions: dims, clear: [], uncertain: [], explore: [] });
+    const result = await withMockedOpenAI(response, () => evaluateMaturity({ ...createSeed('공부 앱'), problem: '집중하기 어렵다' }, 'openai', undefined, 'ko'));
     expect(result.dimensions[0]?.reason).toContain('현재 Seed');
     expect(result.dimensions[0]?.reason).not.toContain('Supported');
   });
 
   it('follows a Korean idea language even when the UI default is English', async () => {
     const seed = createSeed('공부앱');
-    const question = await nextQuestion(seed, 'local', undefined, 'en');
+    // The provider is asked for the "user" focus (the only missing field); a
+    // wrong focus in the mocked response exercises the deterministic
+    // Korean-language safe-question path instead of trusting the model text.
+    const wrongFocusResponse = JSON.stringify({ question: 'irrelevant', maturityDelta: 3, focus: 'problem' });
+    const question = await withMockedOpenAI(wrongFocusResponse, () => nextQuestion(seed, 'openai', undefined, 'en'));
     expect(question.question).toContain('아이디어');
-    const update = await growthUpdate(seed, '학생이 매일 복습해요', 'local', undefined, 'en');
+    const updateResponse = JSON.stringify({ updatedSummary: '공부앱 — 학생이 매일 복습해요', questionReason: '방금 답변을 반영했습니다', contradictionsDetected: [], suggestions: [], maturityDelta: 3 });
+    const update = await withMockedOpenAI(updateResponse, () => growthUpdate(seed, '학생이 매일 복습해요', 'openai', undefined, 'en'));
     expect(update.questionReason).toContain('반영');
   });
 
   it('keeps AI content in English when a Korean UI user writes an English idea', async () => {
-    const question = await nextQuestion(createSeed('A study app'), 'local', undefined, 'ko');
+    const seed = createSeed('A study app');
+    const wrongFocusResponse = JSON.stringify({ question: 'irrelevant', maturityDelta: 3, focus: 'problem' });
+    const question = await withMockedOpenAI(wrongFocusResponse, () => nextQuestion(seed, 'openai', undefined, 'ko'));
     expect(question.question).toContain('Who');
   });
 
-  it('does not let a generated English lens override a Korean seed', async () => {
-    const seed = createSeed('공부앱');
-    const insight = await waterInsight(seed, { id: 'user', name: 'User', question: 'Who uses this?' }, 'local', undefined, 'en');
-    expect(insight.summary).toContain('관점');
+  it('infers the Korean content language from a Korean seed regardless of the UI default', () => {
+    expect(inferProviderLanguage('en', ['공부앱', '학생이 매일 복습해요'])).toBe('ko');
   });
 
   it('recognizes a short Korean idea instead of requiring a long phrase', async () => {
-    const question = await nextQuestion(createSeed('앱'), 'local', undefined, 'en');
+    const wrongFocusResponse = JSON.stringify({ question: 'irrelevant', maturityDelta: 3, focus: 'problem' });
+    const question = await withMockedOpenAI(wrongFocusResponse, () => nextQuestion(createSeed('앱'), 'openai', undefined, 'en'));
     expect(question.question).toContain('아이디어');
   });
 
-  it('keeps local growth questions easy for non-developers', async () => {
+  it('keeps growth questions easy for non-developers when a provider returns jargon', async () => {
     const seed = { ...createSeed('공부앱'), users: ['학생'], problem: '단어를 오래 기억하지 못함', goals: ['단어를 기억하기'], constraints: ['암기만'], assumptions: ['학생이 매일 써봄'] };
-    const question = await nextQuestion(seed, 'local', undefined, 'ko');
+    const response = JSON.stringify({ question: '이 가정을 어떻게 검증할 전략과 시그널을 정하시겠어요?', maturityDelta: 3, focus: 'validation' });
+    const question = await withMockedOpenAI(response, () => nextQuestion(seed, 'openai', undefined, 'ko'));
     expect(question.question).not.toMatch(/가정|검증|시그널|신호|스코프|실현 가능성/);
   });
 
-  it('keeps the assumption fallback natural when the constraint is a sentence', async () => {
-    const seed = { ...createSeed('공부앱'), users: ['개인 사용자'], problem: '단어를 외우기 어려움', goals: ['단어 기억하기'], constraints: ['난 암기 전용으로 만들고 싶어'] };
-    const question = await nextQuestion(seed, 'local', undefined, 'ko');
-    expect(question.question).toContain('처음 써볼 사람');
-    expect(question.question).not.toContain('싶어로');
-  });
-
-  it('keeps a long fallback conversation moving after the safe pool is used', async () => {
+  it('keeps a long conversation moving with an unused safe question after the safe pool is used', async () => {
     const base = createSeed('공부앱');
     const previous = [
       '이 아이디어를 가장 먼저 써봤으면 하는 사람은 누구예요?',
@@ -468,7 +472,11 @@ describe('AI language handling', () => {
       '누가 이 아이디어를 가장 반가워할까요?',
       '오늘 이걸 써볼 사람은 누구일까요?',
     ].map((question, index) => ({ id: `old-${index}`, seedId: base.id, question, focus: 'user' as const, importance: 'high' as const, status: 'answered' as const, answer: '이전 답변', createdAt: new Date(index).toISOString() }));
-    const result = await nextQuestion({ ...base, openQuestions: previous }, 'local', undefined, 'ko');
+    // A wrong-focus response forces the deterministic safe-question path so
+    // this exercises `unusedSafeQuestion` without depending on the removed
+    // local provider class.
+    const wrongFocusResponse = JSON.stringify({ question: 'irrelevant', maturityDelta: 3, focus: 'problem' });
+    const result = await withMockedOpenAI(wrongFocusResponse, () => nextQuestion({ ...base, openQuestions: previous }, 'openai', undefined, 'ko'));
     expect(result.question).toBe('지금 떠오르는 한 가지를 말해볼까요?');
     expect(previous.some((entry) => entry.question === result.question)).toBe(false);
   });
@@ -476,15 +484,17 @@ describe('AI language handling', () => {
   it('keeps branch follow-up questions free of developer jargon', async () => {
     const seed = createSeed('A study app');
     const branch = { id: 'branch-1', seedId: seed.id, name: 'Focused workflow', slug: 'focused-workflow', summary: 'A focused workflow', direction: 'Focused workflow', status: 'active' as const, maturity: 20, assumptions: [], decisions: [], openQuestions: [], createdAt: '', updatedAt: '' };
-    const question = await nextQuestion(seed, 'local', undefined, 'en', [], branch);
+    const response = JSON.stringify({ question: 'What is the signal that validates this assumption within scope?', maturityDelta: 3, focus: 'validation' });
+    const question = await withMockedOpenAI(response, () => nextQuestion(seed, 'openai', undefined, 'en', [], branch));
     expect(question.question).not.toMatch(/signal|scope|validation|assumption/i);
   });
 
   it('follows the latest Korean answer when an idea started in English', async () => {
     const seed = createSeed('A study app');
-    const question = await nextQuestion(seed, 'local', undefined, 'en', [{
+    const wrongFocusResponse = JSON.stringify({ question: 'irrelevant', maturityDelta: 3, focus: 'problem' });
+    const question = await withMockedOpenAI(wrongFocusResponse, () => nextQuestion(seed, 'openai', undefined, 'en', [{
       id: 'answer-1', seedId: seed.id, role: 'user', type: 'answer', content: '학생이 먼저 써요.', createdAt: '',
-    }]);
+    }]));
     expect(question.question).toContain('아이디어');
   });
 
@@ -803,7 +813,7 @@ describe('AI language handling', () => {
       const englishSeed = { ...createSeed('A study app'), users: ['students'], problem: 'forgetting words', goals: ['remember more'], constraints: ['one small flow'], assumptions: ['students try it'], openQuestions: [] };
       const english = await nextQuestion(englishSeed, 'openai', undefined, 'en');
       expect(english.question).not.toContain('worth building');
-      expect(english.question).toContain('learn');
+      expect(english.question).toContain('come back');
     } finally {
       globalThis.fetch = originalFetch;
       if (previousHome === undefined) delete process.env.SEED_HOME; else process.env.SEED_HOME = previousHome;
@@ -929,11 +939,26 @@ describe('AI language handling', () => {
     }
   });
 
-  it('keeps local validation prompts concrete for beginners', async () => {
-    const seed = { ...createSeed('암기 앱'), users: ['학생'], problem: '단어를 잊음', goals: ['단어 기억'], constraints: ['암기만'], assumptions: ['학생이 써봄'], openQuestions: [] };
-    const question = await nextQuestion(seed, 'local', undefined, 'ko');
-    expect(question.question).not.toMatch(/가정|검증|위험한|가치가 있다고|가치를|영향|전략|기준/);
-    expect(question.question).toMatch(/사람|무엇|언제|어떤/);
+  it('keeps validation prompts concrete for beginners when a provider returns jargon', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'seed-validation-question-'));
+    const previousHome = process.env.SEED_HOME;
+    const previousKey = process.env.SEED_OPENAI_API_KEY;
+    const originalFetch = globalThis.fetch;
+    process.env.SEED_HOME = root;
+    process.env.SEED_OPENAI_API_KEY = 'test-key';
+    await writeFile(path.join(root, 'config.json'), JSON.stringify({ version: 1, activeProvider: 'openai', providers: [{ id: 'openai', name: 'OpenAI', type: 'openai', defaultModel: 'test-model', enabled: true }] }));
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: '{"question":"이 아이디어의 위험한 가정을 어떻게 검증할 전략을 세우시겠어요?","maturityDelta":3,"focus":"validation"}' } }] }), { status: 200 })) as typeof fetch;
+    try {
+      const seed = { ...createSeed('암기 앱'), users: ['학생'], problem: '단어를 잊음', goals: ['단어 기억'], constraints: ['암기만'], assumptions: ['학생이 써봄'], openQuestions: [] };
+      const question = await nextQuestion(seed, 'openai', undefined, 'ko');
+      expect(question.question).not.toMatch(/가정|검증|위험한|가치가 있다고|가치를|영향|전략|기준/);
+      expect(question.question).toMatch(/사람|무엇|언제|어떤/);
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (previousHome === undefined) delete process.env.SEED_HOME; else process.env.SEED_HOME = previousHome;
+      if (previousKey === undefined) delete process.env.SEED_OPENAI_API_KEY; else process.env.SEED_OPENAI_API_KEY = previousKey;
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('reads the local Codex auth file used by openai-oauth', async () => {
@@ -952,25 +977,41 @@ describe('AI language handling', () => {
   });
 
   it('understands answers to Korean user/problem questions', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'seed-ko-'));
+    const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'seed-ko-'));
+    const configHome = await mkdtemp(path.join(os.tmpdir(), 'seed-ko-home-'));
+    const previousHome = process.env.SEED_HOME;
+    const previousKey = process.env.SEED_OPENAI_API_KEY;
+    const originalFetch = globalThis.fetch;
+    process.env.SEED_HOME = configHome;
+    process.env.SEED_OPENAI_API_KEY = 'test-key';
+    await writeFile(path.join(configHome, 'config.json'), JSON.stringify({ version: 1, activeProvider: 'openai', providers: [{ id: 'openai', name: 'OpenAI', type: 'openai', defaultModel: 'test-model', enabled: true }] }));
+    let nextResponse = JSON.stringify({ question: '이 아이디어를 가장 먼저 써봤으면 하는 사람은 누구예요?', maturityDelta: 3, focus: 'user' });
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: nextResponse } }] }), { status: 200 })) as typeof fetch;
     try {
-      const store = new SeedStore(root);
+      const store = new SeedStore(projectRoot);
       const seed = await plant(store, '개발자를 돕는 안내 도구');
-      const question = await askGrowthQuestion(store, seed, 'local', undefined, undefined, 'ko');
+      const question = await askGrowthQuestion(store, seed, 'openai', undefined, undefined, 'ko');
       const prompted = await store.load();
       expect(question).toContain('아이디어');
       const userAnswer = '처음에는 저장소를 처음 보는 개발자입니다.';
-      const userResult = await applyGrowth(store, prompted, userAnswer, 'local', undefined, 'ko');
+      nextResponse = JSON.stringify({ updatedSummary: `개발자를 돕는 안내 도구 — ${userAnswer}`, questionReason: '반영했습니다', contradictionsDetected: [], suggestions: [], maturityDelta: 3 });
+      const userResult = await applyGrowth(store, prompted, userAnswer, 'openai', undefined, 'ko');
       expect(userResult.seed.users).toContain(userAnswer);
       expect(userResult.seed.problem).toBe('');
-      const problemQuestion = await askGrowthQuestion(store, userResult.seed, 'local', undefined, undefined, 'ko');
+      nextResponse = JSON.stringify({ question: '“처음에는 저장소를 처음 보는 개발자입니다”인 사람이 가장 답답하거나 막히는 순간은 언제예요?', maturityDelta: 3, focus: 'problem' });
+      const problemQuestion = await askGrowthQuestion(store, userResult.seed, 'openai', undefined, undefined, 'ko');
       expect(problemQuestion).toContain('답답');
       expect(problemQuestion).toContain('처음에는');
       const problemAnswer = '저장소 구조를 처음 파악할 때 가장 힘들어합니다.';
-      const result = await applyGrowth(store, await store.load(), problemAnswer, 'local', undefined, 'ko');
+      nextResponse = JSON.stringify({ updatedSummary: `개발자를 돕는 안내 도구 — ${problemAnswer}`, questionReason: '반영했습니다', contradictionsDetected: [], suggestions: [], maturityDelta: 3 });
+      const result = await applyGrowth(store, await store.load(), problemAnswer, 'openai', undefined, 'ko');
       expect(result.seed.problem).toBe(problemAnswer);
     } finally {
-      await rm(root, { recursive: true, force: true });
+      globalThis.fetch = originalFetch;
+      if (previousHome === undefined) delete process.env.SEED_HOME; else process.env.SEED_HOME = previousHome;
+      if (previousKey === undefined) delete process.env.SEED_OPENAI_API_KEY; else process.env.SEED_OPENAI_API_KEY = previousKey;
+      await rm(projectRoot, { recursive: true, force: true });
+      await rm(configHome, { recursive: true, force: true });
     }
   });
 
@@ -992,3 +1033,7 @@ describe('AI language handling', () => {
     expect(context.branchContext?.decisions[0]?.decision).toBe('Use the focused path');
   });
 });
+
+
+
+

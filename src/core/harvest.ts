@@ -6,6 +6,7 @@ import { Branch, ConversationEntry, HarvestResult, HarvestType, ResearchEntry, S
 import { SeedStore } from '../storage/store.js';
 import { addEvent } from './seed-manager.js';
 import { t } from '../i18n/index.js';
+import { assessHarvestReadiness } from './harvest-readiness.js';
 
 const harvestTypes: HarvestType[] = ['idea', 'brief', 'prd', 'trd', 'readme', 'prompt'];
 const harvestQueues = new Map<string, Promise<string>>();
@@ -193,6 +194,34 @@ ${openQuestions(seed, lang)}
 `;
 }
 
+function renderReadme(seed: SeedState, lang: 'en' | 'ko'): string {
+  const ko = lang === 'ko';
+  const unknown = ko ? '미정 - 구현 및 사용 방법이 아직 기록되지 않았습니다.' : 'TBD - implementation and usage instructions have not been recorded.';
+  return `# ${seed.name}
+
+## ${ko ? '개요' : 'Overview'}
+${seed.coreIdea}
+
+## ${ko ? '해결할 문제' : 'Problem'}
+${seed.problem || 'TBD'}
+
+## ${ko ? '대상 사용자' : 'Target users'}
+${bullets(seed.users)}
+
+## ${ko ? '목표' : 'Goals'}
+${bullets(seed.goals)}
+
+## ${ko ? '범위와 제약' : 'Scope and constraints'}
+${bullets(seed.constraints)}
+
+## ${ko ? '설치 및 사용' : 'Installation and usage'}
+${unknown}
+
+## ${ko ? '열린 질문' : 'Open questions'}
+${openQuestions(seed, lang)}
+`;
+}
+
 function render(seed: SeedState, type: HarvestType, lang: 'en' | 'ko', context: HarvestContext): string {
   const ko = lang === 'ko';
   const branches = context.branches;
@@ -204,13 +233,13 @@ function render(seed: SeedState, type: HarvestType, lang: 'en' | 'ko', context: 
     : branches.filter((branch) => branch.status === 'pruned').map((branch) => branch.name);
   if (type === 'idea') return `# ${seed.name}\n\n## ${ko ? '한 줄 아이디어' : 'One-line Idea'}\n${seed.coreIdea}\n\n## ${ko ? '대상 사용자' : 'Target User'}\n${seed.users.join(', ') || 'TBD'}\n\n## ${ko ? '문제' : 'Problem'}\n${seed.problem || 'TBD'}\n\n## ${ko ? '핵심 경험' : 'Core Experience'}\n${seed.goals.join('; ') || 'TBD'}\n\n## ${ko ? '핵심 인사이트' : 'Key Insight'}\n${seed.assumptions.join('; ') || 'TBD'}\n`;
   if (type === 'brief') return `# ${seed.name}\n\n- **${ko ? '아이디어' : 'Idea'}:** ${seed.coreIdea}\n- **${ko ? '문제' : 'Problem'}:** ${seed.problem || 'TBD'}\n- **${ko ? '사용자' : 'Users'}:** ${seed.users.join(', ') || 'TBD'}\n- **${ko ? '핵심 경험' : 'Core experience'}:** ${seed.goals.join('; ') || 'TBD'}\n- **${ko ? 'MVP' : 'MVP'}:** ${must.join('; ') || 'TBD'}\n- **${ko ? '방향' : 'Directions'}:** ${branches.filter((branch) => branch.status === 'active').map((branch) => branch.name).join(', ') || 'TBD'}\n- **${ko ? '성숙도' : 'Maturity'}:** ${seed.maturity}%\n`;
-  if (type === 'readme') return `# ${seed.name}\n\n## ${ko ? '설명' : 'Description'}\n${seed.coreIdea}\n\n## ${ko ? '이유' : 'Why'}\n${seed.problem || 'TBD'}\n\n## ${ko ? '기능' : 'Features'}\n${bullets(seed.goals)}\n\n## ${ko ? '사용법' : 'Usage'}\n${seed.goals[0] ? `${ko ? '대상 사용자' : 'Help'} ${seed.users[0] || (ko ? '대상 사용자' : 'the target user')} ${ko ? '가 다음을 달성하도록 합니다' : 'achieve'}: ${seed.goals[0]}` : 'TBD'}\n\n## ${ko ? '설치' : 'Installation'}\n\`\`\`bash\nnpm install\n\`\`\`\n\n## ${ko ? '예시' : 'Examples'}\n\`\`\`bash\nseed "${seed.originalIdea}"\nseed grow\n\`\`\`\n\n## ${ko ? '구조' : 'Architecture'}\n${ko ? 'CLI → 아이디어 성장 엔진 → 로컬 `.seed/` 저장소 → 선택적 AI 프로바이더' : 'CLI → idea growth engines → local `.seed/` storage → optional AI provider'}\n\n\n## ${ko ? '개발' : 'Development'}\n${ko ? '`npm run build`와 `npm test`를 실행하세요.' : 'Run `npm run build` and `npm test`.'}\n\n## ${ko ? '라이선스' : 'License'}\nMIT\n`;
+  if (type === 'readme') return renderReadme(seed, lang);
   if (type === 'prompt') return ko ? `# ${seed.name} 구현 작업 지시서\n\n## 맥락\n${seed.coreIdea}\n\n## 목표\n${bullets(seed.goals)}\n\n## 기대 동작\n${seed.problem || 'TBD'}\n\n## 제약\n${bullets(seed.constraints)}\n\n## 근거와 결정\n${answeredConversation(context)}\n\n### 확정된 결정\n${decisionLines(seed, branches)}\n\n## 수락 기준\n- 명시적으로 필요한 경우를 제외하고 기존 파일을 보존합니다.\n- 핵심 사용자 흐름에 대한 테스트를 추가합니다.\n- 근거 없는 동작을 만들지 않습니다.\n- TBD와 오픈 질문을 문서화합니다.\n` : `You are implementing ${seed.name}.\n\n## Context\n${seed.coreIdea}\n\n## Goals\n${bullets(seed.goals)}\n\n## Expected behavior\n${seed.problem || 'TBD'}\n\n## Constraints\n${bullets(seed.constraints)}\n\n## Evidence and decisions\n${answeredConversation(context)}\n\n### Confirmed decisions\n${decisionLines(seed, branches)}\n\n## Acceptance criteria\n- Preserve existing files unless explicitly required.\n- Add tests for the core user flow.\n- Do not invent behavior not supported by the context.\n- Document any TBD or open question.\n`;
   if (type === 'prd') return `# ${ko ? '제품 요구사항 문서' : 'Product Requirements Document'}\n\n## 1. ${ko ? '제품 개요' : 'Product Overview'}\n**${ko ? '이름' : 'Name'}:** ${seed.name}\n\n**${ko ? '한 줄 설명' : 'One-line'}:** ${seed.coreIdea}\n\n**${ko ? '비전' : 'Vision'}:** ${vision}\n\n**${ko ? '배경' : 'Background'}:** ${seed.problem || 'TBD'}\n\n## 2. ${ko ? '문제' : 'Problem'}\n${seed.problem || 'TBD'}\n\n## 3. ${ko ? '대상 사용자' : 'Target Users'}\n${bullets(seed.users)}\n\n## 4. ${ko ? '목표' : 'Goals'}\n${bullets(seed.goals)}\n\n## 5. ${ko ? '핵심 UX' : 'Core UX'}\n${ko ? '1. 사용자가 구체적인 상황을 설명합니다.\n2. Seed가 한 번에 하나의 핵심 질문을 합니다.\n3. 답변이 요약과 성숙도 신호에 반영됩니다.\n4. 사용자가 검증한 뒤 준비되면 수확합니다.' : '1. The user shares a concrete situation.\n2. Seed asks one focused question.\n3. The answer updates the summary and maturity signal.\n4. The user reviews, validates, and harvests when ready.'}\n\n## 6. ${ko ? '제품 기능' : 'Product Features'}\n${bullets([...seed.goals, ...branches.filter((branch) => branch.status === 'active').map((branch) => `${branch.name}: ${branch.summary}`)])}\n\n## 7. ${ko ? 'MVP 범위' : 'MVP Scope'}\n- ${ko ? '필수' : 'Must'}: ${must.join('; ') || 'TBD'}\n- ${ko ? '권장' : 'Should'}: ${branches.filter((branch) => branch.status === 'active').map((branch) => branch.name).join('; ') || 'TBD'}\n- ${ko ? '향후' : 'Future'}: ${future.join('; ') || 'TBD'}\n\n## 8. ${ko ? '차별화' : 'Differentiation'}\n${branchLines(branches)}\n\n### ${ko ? '근거' : 'Evidence'}\n${researchLines(research, lang)}\n\n## 9. ${ko ? 'UX 원칙' : 'UX Principles'}\n${ko ? '- 한 번에 하나의 핵심 질문만 합니다.\n- 사용자의 답변을 요약에 반영합니다.\n- 사실·추정·사용자 결정을 분리합니다.\n- 확인 없이 결정을 대신하지 않습니다.' : '- Ask one focused question at a time.\n- Reflect the user\'s answer in the summary.\n- Separate facts, estimates, and user decisions.\n- Do not make decisions without confirmation.'}\n\n## 10. ${ko ? '성공 기준' : 'Success Criteria'}\n${bullets(seed.goals.map((goal) => ko ? `대상 사용자가 다음을 달성할 수 있습니다: ${goal}` : `The target user can achieve: ${goal}`))}\n\n## 11. ${ko ? '리스크' : 'Risks'}\n${bullets([...seed.assumptions.map((assumption) => ko ? `검증되지 않은 가정: ${assumption}` : `Unverified assumption: ${assumption}`), ...seed.openQuestions.filter((question) => question.status === 'open').map((question) => ko ? `오픈 질문: ${question.question}` : `Open question: ${question.question}`)])}\n\n## 12. ${ko ? '향후 기회' : 'Future Opportunities'}\n${bullets(future)}\n\n## 13. ${ko ? '오픈 질문' : 'Open Questions'}\n${openQuestions(seed)}\n`;
   return renderTrd(seed, lang, context, future);
 }
 
-async function harvestOneUnlocked(store: SeedStore, seed: SeedState, type: HarvestType, lang: 'en' | 'ko'): Promise<string> {
+async function harvestOneUnlocked(store: SeedStore, seed: SeedState, type: HarvestType, lang: 'en' | 'ko', draft: boolean): Promise<string> {
   const dir = path.join(store.base, 'harvest'); await ensureDir(dir);
   const existing = (await listFiles(dir)).filter((file) => new RegExp(`${type}-v\\d+\\.md$`).test(file));
   // Use the highest existing version rather than the file count. This keeps
@@ -234,6 +263,13 @@ async function harvestOneUnlocked(store: SeedStore, seed: SeedState, type: Harve
     content = content.replace(evidenceBlock, `${evidenceBlock}\n\n### ${lang === 'ko' ? '대화 근거' : 'Conversation evidence'}\n${answeredConversation(context, lang)}`);
     content = content.replace('\n## 9.', `\n\n### ${lang === 'ko' ? '확정된 결정' : 'Confirmed decisions'}\n${decisionLines(seed, branches, lang)}\n\n## 9.`);
   }
+  if (draft) {
+    const missing = assessHarvestReadiness(seed, type).missing;
+    if (missing.length) {
+      const labels = missing.map((item) => t(`harvest.evidence.${item}`, {}, lang)).join(', ');
+      content = `> ${t('harvest.draftNotice', { missing: labels }, lang)}\n\n${content}`;
+    }
+  }
   await atomicWrite(file, content);
   const current = await store.load();
   const harvested = current.status === 'dormant' || current.status === 'harvested' ? current : { ...current, status: 'harvested' as const, updatedAt: now() };
@@ -243,24 +279,24 @@ async function harvestOneUnlocked(store: SeedStore, seed: SeedState, type: Harve
   await addEvent(store, harvested, 'harvest', `Harvested ${type}`, { file, version });
   return file;
 }
-async function harvestOne(store: SeedStore, seed: SeedState, type: HarvestType, lang: 'en' | 'ko'): Promise<string> {
+async function harvestOne(store: SeedStore, seed: SeedState, type: HarvestType, lang: 'en' | 'ko', draft: boolean): Promise<string> {
   // Version discovery, markdown write, result record, and history event must
   // share one queue per document type so concurrent harvests stay append-only.
   const key = harvestQueueKey(store, type);
   const previous = harvestQueues.get(key) ?? Promise.resolve('');
-  const operation = previous.catch(() => '').then(() => harvestOneUnlocked(store, seed, type, lang));
+  const operation = previous.catch(() => '').then(() => harvestOneUnlocked(store, seed, type, lang, draft));
   harvestQueues.set(key, operation);
   try { return await operation; }
   finally { if (harvestQueues.get(key) === operation) harvestQueues.delete(key); }
 }
-export async function harvest(store: SeedStore, seed: SeedState, type: HarvestType | 'all', lang: 'en' | 'ko'): Promise<string | string[]> {
+export async function harvest(store: SeedStore, seed: SeedState, type: HarvestType | 'all', lang: 'en' | 'ko', options: { draft?: boolean } = {}): Promise<string | string[]> {
   if (type === 'all') {
     // Each harvest writes the seed status/history. Serialize the documents so
     // Windows atomic renames cannot race on the shared seed.json file.
     const files: string[] = [];
-    for (const entry of harvestTypes) files.push(await harvestOne(store, seed, entry, lang));
+    for (const entry of harvestTypes) files.push(await harvestOne(store, seed, entry, lang, options.draft ?? false));
     return files;
   }
-  return harvestOne(store, seed, type, lang);
+  return harvestOne(store, seed, type, lang, options.draft ?? false);
 }
 export function harvestTitle(type: HarvestType | 'all', lang: 'en' | 'ko' = 'en'): string { return t(titleKeys[type], {}, lang); }

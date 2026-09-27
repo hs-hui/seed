@@ -2,8 +2,8 @@ import { Branch, SeedState, now, slugify } from '../domain.js';
 import { randomUUID } from 'node:crypto';
 import { SeedStore } from '../storage/store.js';
 import { addEvent } from './seed-manager.js';
-import { suggestBranches, suggestPrune } from '../ai/provider.js';
-import type { ProviderLanguage } from '../ai/provider.js';
+import { coreAI } from './ai.js';
+import type { ProviderLanguage } from '../ai/contracts.js';
 import path from 'node:path';
 import { withKeyedLock } from '../utils/fs.js';
 
@@ -22,8 +22,8 @@ async function createBranchUnlocked(store: SeedStore, seed: SeedState, name: str
 export async function createBranch(store: SeedStore, seed: SeedState, name: string, summary: string, providerId?: string): Promise<Branch> {
   return withKeyedLock(path.join(store.base, 'seed.json'), () => createBranchUnlocked(store, seed, name, summary, providerId));
 }
-export async function branchSuggestions(seed: SeedState, providerId?: string, model?: string, language: ProviderLanguage = 'en'): Promise<Array<{ name: string; summary: string }>> { return suggestBranches(seed, providerId, model, language); }
-export async function pruneSuggestions(seed: SeedState, providerId?: string, model?: string, language: ProviderLanguage = 'en'): Promise<Array<{ item: string; reason: string }>> { return suggestPrune(seed, providerId, model, language); }
+export async function branchSuggestions(seed: SeedState, providerId?: string, model?: string, language: ProviderLanguage = 'en'): Promise<Array<{ name: string; summary: string }>> { return coreAI.suggestBranches(seed, providerId, model, language); }
+export async function pruneSuggestions(seed: SeedState, providerId?: string, model?: string, language: ProviderLanguage = 'en'): Promise<Array<{ item: string; reason: string }>> { return coreAI.suggestPrune(seed, providerId, model, language); }
 async function pruneItemUnlocked(store: SeedStore, seed: SeedState, item: string, language: 'en' | 'ko' = 'en'): Promise<SeedState> {
   const currentSeed = await store.load();
   if (currentSeed.status === 'dormant') throw new Error('seed-dormant');

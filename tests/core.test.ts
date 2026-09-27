@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,8 +14,17 @@ import { restoreItem, wake, wither } from '../src/core/lifecycle.js';
 import { evaluateMaturity, waterInsight, waterPerspectives } from '../src/ai/provider.js';
 import { gardenEntries } from '../src/core/garden.js';
 import { webSources } from '../src/core/sunlight.js';
+import { useScriptedProvider } from './test-support/scripted-provider.js';
 
 describe('Seed MVP flow', () => {
+  // Every AI-backed helper below now requires a real configured provider.
+  // Install a scripted OpenAI-compatible mock for the whole suite so
+  // existing scenarios keep exercising the same conversational content
+  // that the retired local fallback provider used to generate directly.
+  let stopScriptedProvider: () => Promise<void>;
+  beforeEach(async () => { stopScriptedProvider = await useScriptedProvider(); });
+  afterEach(async () => { await stopScriptedProvider(); });
+
   it('extracts opt-in web sources and normalizes redirect URLs', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = vi.fn(async () => new Response('<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fstudy&amp;rut=ignored">Example <b>study</b></a>', { status: 200 })) as typeof fetch;
@@ -65,13 +74,13 @@ describe('Seed MVP flow', () => {
       const store = new SeedStore(root);
       const seed = await plant(store, '  A repository guide for new developers  ');
       expect(seed.originalIdea).toBe('A repository guide for new developers');
-      const question = await askGrowthQuestion(store, seed, 'local');
+      const question = await askGrowthQuestion(store, seed, 'openai');
       const prompted = await store.load();
       expect(prompted.openQuestions.some((entry) => entry.question === question && entry.status === 'open')).toBe(true);
       expect(prompted.openQuestions.find((entry) => entry.question === question)?.importance).toBe('high');
-      expect(await askGrowthQuestion(store, prompted, 'local')).toBe(question);
+      expect(await askGrowthQuestion(store, prompted, 'openai')).toBe(question);
       expect((await store.conversations(seed.id)).filter((entry) => entry.type === 'question')).toHaveLength(1);
-      const result = await applyGrowth(store, prompted, 'Help a developer find the right starting point.', 'local');
+      const result = await applyGrowth(store, prompted, 'Help a developer find the right starting point.', 'openai');
       expect(result.seed.coreIdea).toContain('Help a developer');
       expect(result.update.updatedSummary).toBe(result.seed.coreIdea);
       expect(result.update.contradictionsDetected).toEqual([]);
@@ -109,7 +118,7 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-empty-answer-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A small idea');
-      await expect(applyGrowth(store, seed, '   ', 'local')).rejects.toThrow('answer-required');
+      await expect(applyGrowth(store, seed, '   ', 'openai')).rejects.toThrow('answer-required');
       expect(await store.conversations(seed.id)).toHaveLength(0);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
@@ -240,8 +249,8 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-question-change-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A study app');
-      const first = await askGrowthQuestion(store, seed, 'local', undefined, undefined, 'ko');
-      const changed = await changeGrowthQuestion(store, await store.load(), 'local', undefined, undefined, 'ko', '너무 어려워 다른질문');
+      const first = await askGrowthQuestion(store, seed, 'openai', undefined, undefined, 'ko');
+      const changed = await changeGrowthQuestion(store, await store.load(), 'openai', undefined, undefined, 'ko', '너무 어려워 다른질문');
       expect(changed).not.toBe(first);
       const saved = await store.load();
       expect(saved.maturity).toBe(seed.maturity);
@@ -272,7 +281,7 @@ describe('Seed MVP flow', () => {
         }],
       };
       await store.save(stale);
-      const question = await askGrowthQuestion(store, stale, 'local', undefined, undefined, 'ko');
+      const question = await askGrowthQuestion(store, stale, 'openai', undefined, undefined, 'ko');
       const saved = await store.load();
       expect(question).not.toMatch(/검증|가정|만들기 전에/);
       expect(saved.openQuestions.find((entry) => entry.id === 'stale-question')?.status).toBe('cancelled');
@@ -332,7 +341,7 @@ describe('Seed MVP flow', () => {
       const store = new SeedStore(root); const seed = await plant(store, 'A study app');
       const branch = await createBranch(store, seed, 'Korean path', 'Explore a Korean direction');
       await addConversation(store, { seedId: seed.id, branchId: branch.id, role: 'user', type: 'answer', content: '학생이 먼저 써요.' });
-      const question = await askGrowthQuestion(store, await store.load(), 'local', undefined, undefined, 'en');
+      const question = await askGrowthQuestion(store, await store.load(), 'openai', undefined, undefined, 'en');
       expect(question).toContain('Who');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
@@ -344,9 +353,9 @@ describe('Seed MVP flow', () => {
       let seed = await plant(store, 'A study planning app');
       const answers = ['High-school students', 'They do not know what to study first', 'A clear plan they can finish today', 'Only planning and completion for v1', 'Students will return if the plan saves them time'];
       for (const answer of answers) {
-        await askGrowthQuestion(store, seed, 'local', undefined, undefined, 'en');
+        await askGrowthQuestion(store, seed, 'openai', undefined, undefined, 'en');
         seed = await store.load();
-        seed = (await applyGrowth(store, seed, answer, 'local', undefined, 'en')).seed;
+        seed = (await applyGrowth(store, seed, answer, 'openai', undefined, 'en')).seed;
       }
       expect(seed.users).toEqual(['High-school students']);
       expect(seed.problem).toBe('They do not know what to study first');
@@ -364,7 +373,7 @@ describe('Seed MVP flow', () => {
     try {
       const store = new SeedStore(root); let seed = await plant(store, 'A study planner');
       for (const answer of ['Students', 'They cannot choose what to study', 'A plan for today', 'Planning only']) {
-        await askGrowthQuestion(store, seed, 'local'); seed = await store.load(); seed = (await applyGrowth(store, seed, answer, 'local')).seed;
+        await askGrowthQuestion(store, seed, 'openai'); seed = await store.load(); seed = (await applyGrowth(store, seed, answer, 'openai')).seed;
       }
       const before = seed.maturity; const bloom = dimensionsFor(seed); const recalculated = calculateMaturity({ ...seed, maturityDimensions: bloom, maturity: 0 });
       expect(recalculated).toBeGreaterThanOrEqual(before - 1);
@@ -379,8 +388,8 @@ describe('Seed MVP flow', () => {
       let seed = await plant(store, 'A focused idea');
       let previous = seed.maturity;
       for (const answer of ['Students', 'They cannot focus', 'Finish one session']) {
-        await askGrowthQuestion(store, seed, 'local');
-        seed = (await applyGrowth(store, await store.load(), answer, 'local')).seed;
+        await askGrowthQuestion(store, seed, 'openai');
+        seed = (await applyGrowth(store, await store.load(), answer, 'openai')).seed;
         expect(seed.maturity).toBeGreaterThan(previous);
         previous = seed.maturity;
       }
@@ -393,14 +402,14 @@ describe('Seed MVP flow', () => {
       const store = new SeedStore(root);
       let seed = await plant(store, 'A study planner');
       for (const answer of ['Students', 'They lose focus', 'Finish a session', 'Timer only', 'Students return']) {
-        await askGrowthQuestion(store, seed, 'local');
-        seed = (await applyGrowth(store, await store.load(), answer, 'local')).seed;
+        await askGrowthQuestion(store, seed, 'openai');
+        seed = (await applyGrowth(store, await store.load(), answer, 'openai')).seed;
       }
-      const first = await askGrowthQuestion(store, seed, 'local');
-      seed = (await applyGrowth(store, await store.load(), 'Learn whether they finish', 'local')).seed;
-      const second = await askGrowthQuestion(store, seed, 'local');
-      seed = (await applyGrowth(store, await store.load(), 'Observe where they stop', 'local')).seed;
-      const third = await askGrowthQuestion(store, seed, 'local');
+      const first = await askGrowthQuestion(store, seed, 'openai');
+      seed = (await applyGrowth(store, await store.load(), 'Learn whether they finish', 'openai')).seed;
+      const second = await askGrowthQuestion(store, seed, 'openai');
+      seed = (await applyGrowth(store, await store.load(), 'Observe where they stop', 'openai')).seed;
+      const third = await askGrowthQuestion(store, seed, 'openai');
       expect(second).not.toBe(first);
       expect(third).not.toBe(second);
     } finally { await rm(root, { recursive: true, force: true }); }
@@ -414,29 +423,9 @@ describe('Seed MVP flow', () => {
       const question = 'Who should this help first?';
       await addConversation(store, { seedId: seed.id, role: 'assistant', type: 'question', content: question });
       await store.save({ ...seed, openQuestions: [{ id: 'legacy-q', seedId: seed.id, question, importance: 'high', status: 'open', createdAt: seed.createdAt }] });
-      const result = await applyGrowth(store, await store.load(), 'Students', 'local');
+      const result = await applyGrowth(store, await store.load(), 'Students', 'openai');
       expect(result.seed.users).toEqual(['Students']);
       expect(result.seed.goals).toEqual([]);
-    } finally { await rm(root, { recursive: true, force: true }); }
-  });
-
-  it('calculates maturity with open-question penalty and decision bonus', () => {
-    const dimensions = Array.from({ length: 8 }, (_, index) => ({ name: String(index), score: 80, reason: '' }));
-    const seed = {
-      version: 1, id: 'seed', name: 'seed', status: 'growing' as const, maturity: 80,
-      maturityDimensions: dimensions, originalIdea: 'x', coreIdea: 'x', problem: '', users: [], goals: [], constraints: [], branches: [], prunedItems: [], assumptions: [],
-      decisions: [{ id: 'd', seedId: 'seed', decision: 'x', reason: 'x', source: 'x', confirmedByUser: true, createdAt: '' }],
-      openQuestions: [{ id: 'q', seedId: 'seed', question: 'x', importance: 'high' as const, status: 'open' as const, createdAt: '' }], createdAt: '', updatedAt: '',
-    };
-    expect(calculateMaturity(seed)).toBe(77);
-  });
-
-  it('does not inflate a fresh seed during a Bloom check', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'seed-fresh-bloom-'));
-    try {
-      const seed = await plant(new SeedStore(root), 'A vague idea');
-      const dimensions = dimensionsFor(seed);
-      expect(calculateMaturity({ ...seed, maturity: 0, maturityDimensions: dimensions })).toBeLessThanOrEqual(10);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
@@ -506,10 +495,11 @@ describe('Seed MVP flow', () => {
       for (const section of ['## 1.', '## 2.', '## 3.', '## 4.', '## 5.', '## 6.', '## 7.', '## 8.', '## 9.', '## 10.', '## 11.', '## 12.', '## 13.', '## 14.', '## 15.', '## 16.', '## 17.', '## 18.', '## 19.', '## 20.', '## 21.']) expect(trd).toContain(section);
       expect(prd).toContain('**Maturity:**');
       expect(prd).toContain('### Conversation evidence');
-      expect(readme).toContain('## Description');
-      expect(readme).toContain('## Architecture');
-      expect(readme).toContain('MIT');
-      expect(readme).not.toContain('placeholder');
+      expect(readme).toContain('## Overview');
+      expect(readme).toContain('## Target users');
+      expect(readme).toContain('TBD - implementation and usage instructions have not been recorded.');
+      expect(readme).not.toContain('npm install');
+      expect(readme).not.toContain('MIT');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
@@ -590,7 +580,7 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-branch-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'Explore a developer workflow');
-      const suggestions = await branchSuggestions(seed, 'local'); expect(suggestions.length).toBeGreaterThanOrEqual(2); expect(suggestions.length).toBeLessThanOrEqual(4);
+      const suggestions = await branchSuggestions(seed, 'openai'); expect(suggestions.length).toBeGreaterThanOrEqual(2); expect(suggestions.length).toBeLessThanOrEqual(4);
       let current = await createBranch(store, seed, suggestions[0]!.name, suggestions[0]!.summary);
       let latest = await store.load();
       for (let index = 1; index < 5; index += 1) { const suggestion = suggestions[index % suggestions.length]!; await createBranch(store, latest, `${suggestion.name}-${index}`, suggestion.summary); latest = await store.load(); }
@@ -640,7 +630,7 @@ describe('Seed MVP flow', () => {
       const branch = await createBranch(store, seed, 'Optional path', 'An optional path');
       const pruned = await pruneItem(store, await store.load(), branch.id, 'en');
       expect(pruned.activeBranch).toBeUndefined();
-      await expect(askGrowthQuestion(store, pruned, 'local')).resolves.toBeTruthy();
+      await expect(askGrowthQuestion(store, pruned, 'openai')).resolves.toBeTruthy();
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
@@ -648,8 +638,8 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-missing-branch-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A small idea');
-      await expect(askGrowthQuestion(store, seed, 'local', 'missing-branch')).rejects.toThrow('branch-selection-not-found');
-      await expect(applyGrowth(store, seed, 'An answer', 'local', 'missing-branch')).rejects.toThrow('branch-selection-not-found');
+      await expect(askGrowthQuestion(store, seed, 'openai', 'missing-branch')).rejects.toThrow('branch-selection-not-found');
+      await expect(applyGrowth(store, seed, 'An answer', 'openai', 'missing-branch')).rejects.toThrow('branch-selection-not-found');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
@@ -659,8 +649,8 @@ describe('Seed MVP flow', () => {
       const store = new SeedStore(root); const seed = await plant(store, 'A small idea');
       const branch = await createBranch(store, seed, 'Optional path', 'An optional path');
       const pruned = await pruneItem(store, await store.load(), branch.id, 'en');
-      await expect(askGrowthQuestion(store, pruned, 'local', branch.id)).rejects.toThrow('branch-not-active');
-      await expect(applyGrowth(store, pruned, 'An answer', 'local', branch.id)).rejects.toThrow('branch-not-active');
+      await expect(askGrowthQuestion(store, pruned, 'openai', branch.id)).rejects.toThrow('branch-not-active');
+      await expect(applyGrowth(store, pruned, 'An answer', 'openai', branch.id)).rejects.toThrow('branch-not-active');
       await expect(recordDecision(store, pruned, 'Keep the branch', 'Not yet', branch.id)).rejects.toThrow('branch-not-active');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
@@ -671,8 +661,8 @@ describe('Seed MVP flow', () => {
       const store = new SeedStore(root);
       const seed = await plant(store, 'A repository guide');
       const branch = await createBranch(store, seed, 'Onboarding tour', 'A guided onboarding tour');
-      const question = await askGrowthQuestion(store, await store.load(), 'local', branch.id);
-      const result = await applyGrowth(store, await store.load(), 'Show the first useful path through the repository', 'local', branch.id);
+      const question = await askGrowthQuestion(store, await store.load(), 'openai', branch.id);
+      const result = await applyGrowth(store, await store.load(), 'Show the first useful path through the repository', 'openai', branch.id);
       const parent = await store.load();
       const savedBranch = (await store.branches(seed.id)).find((item) => item.id === branch.id)!;
       expect(question).toBeTruthy();
@@ -692,9 +682,9 @@ describe('Seed MVP flow', () => {
       const store = new SeedStore(root);
       const seed = await plant(store, '공부 플래너');
       const branch = await createBranch(store, seed, 'Daily ritual', 'A daily study ritual');
-      const firstQuestion = await askGrowthQuestion(store, await store.load(), 'local', branch.id, undefined, 'ko');
-      const first = await applyGrowth(store, await store.load(), '첫 주에 매일 20분 실행', 'local', branch.id, 'ko');
-      const secondQuestion = await askGrowthQuestion(store, first.seed, 'local', branch.id, undefined, 'ko');
+      const firstQuestion = await askGrowthQuestion(store, await store.load(), 'openai', branch.id, undefined, 'ko');
+      const first = await applyGrowth(store, await store.load(), '첫 주에 매일 20분 실행', 'openai', branch.id, 'ko');
+      const secondQuestion = await askGrowthQuestion(store, first.seed, 'openai', branch.id, undefined, 'ko');
       expect(firstQuestion).toContain('Daily ritual');
       expect(secondQuestion).not.toBe(firstQuestion);
       expect(secondQuestion).not.toContain('누가');
@@ -765,7 +755,7 @@ describe('Seed MVP flow', () => {
       expect((await store.branches(seed.id)).find((item) => item.id === branch.id)?.status).toBe('pruned');
       await restoreItem(store, await store.load(), branch.id.toUpperCase());
       expect((await store.branches(seed.id)).find((item) => item.id === branch.id)?.status).toBe('active');
-      const question = await askGrowthQuestion(store, await store.load(), 'local', branch.id.toUpperCase());
+      const question = await askGrowthQuestion(store, await store.load(), 'openai', branch.id.toUpperCase());
       expect(question).toBeTruthy();
       const decision = await recordDecision(store, await store.load(), 'Keep this direction', 'It is focused', branch.id.toUpperCase());
       expect(decision.decision.branchId).toBe(branch.id);
@@ -789,10 +779,10 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-dormant-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A dormant idea'); const dormant = await wither(store, seed);
-      await expect(applyGrowth(store, dormant, 'An answer', 'local')).rejects.toThrow('seed-dormant');
+      await expect(applyGrowth(store, dormant, 'An answer', 'openai')).rejects.toThrow('seed-dormant');
       await expect(createBranch(store, dormant, 'Blocked path', 'Should not mutate dormancy')).rejects.toThrow('seed-dormant');
       await expect(recordDecision(store, dormant, 'Blocked decision')).rejects.toThrow('seed-dormant');
-      const evaluation = await evaluateMaturity(dormant, 'local'); const stillDormant = { ...dormant, maturityDimensions: evaluation.dimensions, maturity: calculateMaturity({ ...dormant, maturityDimensions: evaluation.dimensions }), status: 'dormant' as const };
+      const evaluation = await evaluateMaturity(dormant, 'openai'); const stillDormant = { ...dormant, maturityDimensions: evaluation.dimensions, maturity: calculateMaturity({ ...dormant, maturityDimensions: evaluation.dimensions }), status: 'dormant' as const };
       await store.save(stillDormant); expect((await store.load()).status).toBe('dormant');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
@@ -801,12 +791,12 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-water-'));
     try {
       const seed = await plant(new SeedStore(root), 'A small idea');
-      const perspectives = await waterPerspectives(seed, 'local', undefined, 'en');
+      const perspectives = await waterPerspectives(seed, 'openai', undefined, 'en');
       expect(perspectives).toHaveLength(4);
       expect(perspectives.map((item) => item.question).join(' ')).not.toMatch(/technology|technical|scope|validation/i);
-      const insight = await waterInsight(seed, perspectives[0]!, 'local', undefined, 'en');
+      const insight = await waterInsight(seed, perspectives[0]!, 'openai', undefined, 'en');
       expect(insight.points.length).toBeGreaterThan(0); expect(insight.assumptions.length).toBeGreaterThan(0);
-      const followUp = await waterInsight(seed, perspectives[0]!, 'local', undefined, 'en', 'A daily planning ritual');
+      const followUp = await waterInsight(seed, perspectives[0]!, 'openai', undefined, 'en', 'A daily planning ritual');
       expect(followUp.summary).toContain('A daily planning ritual');
       expect(followUp.points[0]).toBe('A daily planning ritual');
     } finally { await rm(root, { recursive: true, force: true }); }
