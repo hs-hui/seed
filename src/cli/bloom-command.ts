@@ -5,6 +5,8 @@ import type { SeedStore } from '../storage/store.js';
 import { evaluateMaturity } from '../ai/provider.js';
 import { calculateMaturity, statusForMaturity } from '../core/maturity.js';
 import { addEvent } from '../core/seed-manager.js';
+import { withKeyedLock } from '../utils/fs.js';
+import path from 'node:path';
 import type { CommonOptions } from './config-commands.js';
 
 export function registerBloomCommand(program: Command, deps: {
@@ -18,11 +20,16 @@ export function registerBloomCommand(program: Command, deps: {
   const bloom = addCommon(program.command('bloom').description(t('help.bloom')));
   bloom.action(async (options: CommonOptions) => run(async () => {
     const store = await targetStore(options.seed); const seed = await currentSeed(store); if (seed.status === 'dormant') throw new Error('seed-dormant'); const research = await store.research(seed.id); const evaluation = await evaluateMaturity(seed, options.provider, options.model, currentLanguage(), research); const dimensions = evaluation.dimensions;
-    const updated: SeedState = { ...seed, maturityDimensions: dimensions, maturity: 0, status: seed.status };
-    updated.maturity = calculateMaturity(updated);
-    // A bloom review after harvest must not reopen a completed seed.
-    updated.status = seed.status === 'harvested' ? 'harvested' : statusForMaturity(updated.maturity);
-    await store.save(updated); await addEvent(store, updated, 'bloom', `Bloom check: ${updated.maturity}%`);
+    const updated = await withKeyedLock(path.join(store.base, 'seed.json'), async () => {
+      const latest = await store.load();
+      if (latest.status === 'dormant') throw new Error('seed-dormant');
+      const current: SeedState = { ...latest, maturityDimensions: dimensions, maturity: 0 };
+      current.maturity = calculateMaturity(current);
+      // A bloom review after harvest must not reopen a completed seed.
+      current.status = latest.status === 'harvested' ? 'harvested' : statusForMaturity(current.maturity);
+      await store.save(current); await addEvent(store, current, 'bloom', `Bloom check: ${current.maturity}%`);
+      return current;
+    });
     const dimensionLabel = (name: string): string => dimensions.some((dimension) => dimension.name === name) ? t(`bloom.dimension.${name}`) : name;
     const recommendationItems = evaluation.uncertain.length
       ? evaluation.uncertain
