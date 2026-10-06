@@ -25,13 +25,23 @@ export async function withKeyedLock<T>(filePath: string, action: () => Promise<T
     const lockPath = key + '.lock';
     const token = randomUUID();
     let handle: Awaited<ReturnType<typeof open>> | undefined;
+    let sharingRetries = 0;
     while (!handle) {
       try {
         handle = await open(lockPath, 'wx');
         await handle.writeFile(JSON.stringify({ owner: lockOwner, token, createdAt: Date.now() }));
       } catch (error) {
         if (handle) { await handle.close(); handle = undefined; await rm(lockPath, { force: true }); }
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        const code = (error as NodeJS.ErrnoException).code;
+        // Windows may report a sharing violation while another process is
+        // opening or deleting this file. Retry briefly, but surface persistent
+        // permission errors instead of waiting forever.
+        if (process.platform === 'win32' && (code === 'EPERM' || code === 'EACCES') && sharingRetries++ < 200) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          continue;
+        }
+        if (code !== 'EEXIST') throw error;
+        sharingRetries = 0;
         try {
           const lock = JSON.parse(await readFile(lockPath, 'utf8')) as { owner?: string; createdAt?: number };
           const [host, pidText] = (lock.owner ?? '').split(':');
@@ -54,7 +64,7 @@ export async function withKeyedLock<T>(filePath: string, action: () => Promise<T
       await handle.close();
       try {
         const lock = JSON.parse(await readFile(lockPath, 'utf8')) as { token?: string };
-        if (lock.token === token) await rm(lockPath, { force: true });
+        if (lock.token === token) await rm(lockPath, { force: true, recursive: true, maxRetries: 10, retryDelay: 25 });
       } catch { /* lock was already reclaimed */ }
     }
   });
