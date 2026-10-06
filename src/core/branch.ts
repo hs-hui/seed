@@ -32,9 +32,9 @@ async function pruneItemUnlocked(store: SeedStore, seed: SeedState, item: string
   const branches = await store.branches(currentSeed.id); const normalizedItem = requestedItem.toLocaleLowerCase(); const target = branches.find((b) => b.name.toLocaleLowerCase() === normalizedItem || b.id.toLocaleLowerCase() === normalizedItem);
   if (target) { await store.saveBranch({ ...target, status: 'pruned', updatedAt: now() }); }
   const before = currentSeed.coreIdea;
-  const label = target?.name ?? requestedItem;
-  const scopeNote = language === 'ko' ? `첫 버전에서는 ${label}은 나중에 해도 괜찮아요.` : `For the first version, we can leave ${label} for later.`;
-  const after = before.toLocaleLowerCase().includes(scopeNote.toLocaleLowerCase()) ? before : `${before} — ${scopeNote}`.slice(0, 240);
+  // Keep the complete product idea intact. Deferred scope belongs in the
+  // structured prunedItems/constraints fields and can be restored there.
+  const after = before;
   const alreadyPruned = currentSeed.prunedItems.some((entry) => {
     const normalizedEntry = entry.trim().toLocaleLowerCase();
     return normalizedEntry === normalizedItem || Boolean(target && (normalizedEntry === target.id.toLocaleLowerCase() || normalizedEntry === target.name.trim().toLocaleLowerCase()));

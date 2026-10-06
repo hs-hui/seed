@@ -37,15 +37,31 @@ function branchLines(branches: Branch[], lang: 'en' | 'ko' = currentHarvestLangu
   return bullets(branches.filter((branch) => branch.status !== 'pruned').map((branch) => `${branch.name}: ${branch.summary}`), lang === 'ko' ? '- 기록된 브랜치가 없습니다.' : '- No branches recorded');
 }
 function answeredConversation(context: HarvestContext, lang: 'en' | 'ko' = currentHarvestLanguage()): string {
+  const adoptedBranchIds = new Set(context.branches.filter((branch) => branch.status !== 'pruned').map((branch) => branch.id));
   const answers = context.conversations
-    .filter((entry) => entry.role === 'user' && entry.type === 'answer' && entry.metadata?.intent !== 'change-question')
+    .filter((entry) => entry.role === 'user' && entry.type === 'answer' && entry.metadata?.intent !== 'change-question'
+      && (!entry.branchId || adoptedBranchIds.has(entry.branchId)))
     .map((entry) => entry.content);
   return answers.length ? answers.map((answer) => `- ${answer}`).join('\n') : lang === 'ko' ? '- 기록된 답변이 없습니다.' : '- No answers recorded';
 }
 function decisionLines(seed: SeedState, branches: Branch[], lang: 'en' | 'ko' = currentHarvestLanguage()): string {
-  const decisions = [...seed.decisions.filter((decision) => decision.confirmedByUser), ...branches.flatMap((branch) => branch.decisions.filter((decision) => decision.confirmedByUser))]
+  const decisions = [...seed.decisions.filter((decision) => decision.confirmedByUser), ...branches.filter((branch) => branch.status !== 'pruned').flatMap((branch) => branch.decisions.filter((decision) => decision.confirmedByUser))]
     .filter((decision, index, all) => all.findIndex((candidate) => candidate.id === decision.id) === index);
   return decisions.length ? decisions.slice(-10).map((decision) => `- ${decision.decision} — ${decision.reason}`).join('\n') : lang === 'ko' ? '- 명시적으로 확정된 결정이 없습니다.' : '- No explicit decisions recorded';
+}
+function productUxEvidence(seed: SeedState, context: HarvestContext, lang: 'en' | 'ko'): string {
+  const adoptedBranchIds = new Set(context.branches.filter((branch) => branch.status !== 'pruned').map((branch) => branch.id));
+  const answers = context.conversations.filter((entry) => entry.role === 'user' && entry.type === 'answer'
+    && entry.metadata?.intent !== 'change-question' && (!entry.branchId || adoptedBranchIds.has(entry.branchId)));
+  const decisions = [...seed.decisions.filter((decision) => decision.confirmedByUser),
+    ...context.branches.filter((branch) => branch.status !== 'pruned').flatMap((branch) => branch.decisions.filter((decision) => decision.confirmedByUser))]
+    .filter((decision, index, all) => all.findIndex((candidate) => candidate.id === decision.id) === index);
+  const evidence = [
+    ...seed.goals.map((goal) => `- ${lang === 'ko' ? '목표' : 'Goal'}: ${goal}`),
+    ...decisions.map((decision) => `- ${lang === 'ko' ? '사용자 확정 결정' : 'User-confirmed decision'}: ${decision.decision}${decision.reason ? ` — ${decision.reason}` : ''}`),
+    ...answers.map((answer) => `- ${lang === 'ko' ? '사용자 답변' : 'User answer'}: ${answer.content}`),
+  ];
+  return evidence.length ? evidence.join('\n') : lang === 'ko' ? '- 미정 — 제품의 사용자 흐름과 UX 요구사항이 기록되지 않았습니다.' : '- TBD — no product user flow or UX requirements have been recorded.';
 }
 
 type SignalCategory = 'platform' | 'stack' | 'storage' | 'services' | 'ai' | 'auth' | 'security' | 'performance' | 'deployment';
@@ -65,8 +81,11 @@ const signalTerms: Record<SignalCategory, Array<[string, RegExp]>> = {
   deployment: [['Vercel', /\bvercel\b/i], ['AWS', /\baws\b/i], ['GCP', /\bgcp\b|google cloud/i], ['Azure', /\bazure\b/i], ['Docker', /\bdocker\b/i], ['App Store', /app store|앱스토어/i], ['Play Store', /play store|플레이 ?스토어/i], ['npm', /\bnpm\b/i], ['Self-hosted', /self[- ]host|on[- ]prem|자체 호스팅/i]],
 };
 function trdEvidence(seed: SeedState, context: HarvestContext): Evidence[] {
-  const decisions = [...seed.decisions, ...context.branches.flatMap((branch) => branch.decisions)].filter((decision) => decision.confirmedByUser);
-  const answers = context.conversations.filter((entry) => entry.role === 'user' && entry.type === 'answer' && entry.metadata?.intent !== 'change-question');
+  const adoptedBranches = context.branches.filter((branch) => branch.status !== 'pruned');
+  const adoptedBranchIds = new Set(adoptedBranches.map((branch) => branch.id));
+  const decisions = [...seed.decisions, ...adoptedBranches.flatMap((branch) => branch.decisions)].filter((decision) => decision.confirmedByUser);
+  const answers = context.conversations.filter((entry) => entry.role === 'user' && entry.type === 'answer' && entry.metadata?.intent !== 'change-question'
+    && (!entry.branchId || adoptedBranchIds.has(entry.branchId)));
   return [
     ...seed.constraints.map((text) => ({ source: 'constraint' as const, text })),
     ...decisions.map((decision) => ({ source: 'decision' as const, text: decision.reason ? `${decision.decision} — ${decision.reason}` : decision.decision })),
@@ -228,6 +247,7 @@ function render(seed: SeedState, type: HarvestType, lang: 'en' | 'ko', context: 
   const research = context.research;
   const vision = seed.goals[0] || (ko ? '사용자의 문제를 더 나은 결과로 바꿉니다.' : 'Turn the user problem into a better outcome.');
   const must = seed.constraints.length ? seed.constraints : seed.goals.slice(0, 1);
+  const uxEvidence = productUxEvidence(seed, context, lang);
   const future = seed.prunedItems.length
     ? seed.prunedItems.map((item) => branches.find((branch) => branch.id === item)?.name ?? item)
     : branches.filter((branch) => branch.status === 'pruned').map((branch) => branch.name);
@@ -235,7 +255,7 @@ function render(seed: SeedState, type: HarvestType, lang: 'en' | 'ko', context: 
   if (type === 'brief') return `# ${seed.name}\n\n- **${ko ? '아이디어' : 'Idea'}:** ${seed.coreIdea}\n- **${ko ? '문제' : 'Problem'}:** ${seed.problem || 'TBD'}\n- **${ko ? '사용자' : 'Users'}:** ${seed.users.join(', ') || 'TBD'}\n- **${ko ? '핵심 경험' : 'Core experience'}:** ${seed.goals.join('; ') || 'TBD'}\n- **${ko ? 'MVP' : 'MVP'}:** ${must.join('; ') || 'TBD'}\n- **${ko ? '방향' : 'Directions'}:** ${branches.filter((branch) => branch.status === 'active').map((branch) => branch.name).join(', ') || 'TBD'}\n- **${ko ? '성숙도' : 'Maturity'}:** ${seed.maturity}%\n`;
   if (type === 'readme') return renderReadme(seed, lang);
   if (type === 'prompt') return ko ? `# ${seed.name} 구현 작업 지시서\n\n## 맥락\n${seed.coreIdea}\n\n## 목표\n${bullets(seed.goals)}\n\n## 기대 동작\n${seed.problem || 'TBD'}\n\n## 제약\n${bullets(seed.constraints)}\n\n## 근거와 결정\n${answeredConversation(context)}\n\n### 확정된 결정\n${decisionLines(seed, branches)}\n\n## 수락 기준\n- 명시적으로 필요한 경우를 제외하고 기존 파일을 보존합니다.\n- 핵심 사용자 흐름에 대한 테스트를 추가합니다.\n- 근거 없는 동작을 만들지 않습니다.\n- TBD와 오픈 질문을 문서화합니다.\n` : `You are implementing ${seed.name}.\n\n## Context\n${seed.coreIdea}\n\n## Goals\n${bullets(seed.goals)}\n\n## Expected behavior\n${seed.problem || 'TBD'}\n\n## Constraints\n${bullets(seed.constraints)}\n\n## Evidence and decisions\n${answeredConversation(context)}\n\n### Confirmed decisions\n${decisionLines(seed, branches)}\n\n## Acceptance criteria\n- Preserve existing files unless explicitly required.\n- Add tests for the core user flow.\n- Do not invent behavior not supported by the context.\n- Document any TBD or open question.\n`;
-  if (type === 'prd') return `# ${ko ? '제품 요구사항 문서' : 'Product Requirements Document'}\n\n## 1. ${ko ? '제품 개요' : 'Product Overview'}\n**${ko ? '이름' : 'Name'}:** ${seed.name}\n\n**${ko ? '한 줄 설명' : 'One-line'}:** ${seed.coreIdea}\n\n**${ko ? '비전' : 'Vision'}:** ${vision}\n\n**${ko ? '배경' : 'Background'}:** ${seed.problem || 'TBD'}\n\n## 2. ${ko ? '문제' : 'Problem'}\n${seed.problem || 'TBD'}\n\n## 3. ${ko ? '대상 사용자' : 'Target Users'}\n${bullets(seed.users)}\n\n## 4. ${ko ? '목표' : 'Goals'}\n${bullets(seed.goals)}\n\n## 5. ${ko ? '핵심 UX' : 'Core UX'}\n${ko ? '1. 사용자가 구체적인 상황을 설명합니다.\n2. Seed가 한 번에 하나의 핵심 질문을 합니다.\n3. 답변이 요약과 성숙도 신호에 반영됩니다.\n4. 사용자가 검증한 뒤 준비되면 수확합니다.' : '1. The user shares a concrete situation.\n2. Seed asks one focused question.\n3. The answer updates the summary and maturity signal.\n4. The user reviews, validates, and harvests when ready.'}\n\n## 6. ${ko ? '제품 기능' : 'Product Features'}\n${bullets([...seed.goals, ...branches.filter((branch) => branch.status === 'active').map((branch) => `${branch.name}: ${branch.summary}`)])}\n\n## 7. ${ko ? 'MVP 범위' : 'MVP Scope'}\n- ${ko ? '필수' : 'Must'}: ${must.join('; ') || 'TBD'}\n- ${ko ? '권장' : 'Should'}: ${branches.filter((branch) => branch.status === 'active').map((branch) => branch.name).join('; ') || 'TBD'}\n- ${ko ? '향후' : 'Future'}: ${future.join('; ') || 'TBD'}\n\n## 8. ${ko ? '차별화' : 'Differentiation'}\n${branchLines(branches)}\n\n### ${ko ? '근거' : 'Evidence'}\n${researchLines(research, lang)}\n\n## 9. ${ko ? 'UX 원칙' : 'UX Principles'}\n${ko ? '- 한 번에 하나의 핵심 질문만 합니다.\n- 사용자의 답변을 요약에 반영합니다.\n- 사실·추정·사용자 결정을 분리합니다.\n- 확인 없이 결정을 대신하지 않습니다.' : '- Ask one focused question at a time.\n- Reflect the user\'s answer in the summary.\n- Separate facts, estimates, and user decisions.\n- Do not make decisions without confirmation.'}\n\n## 10. ${ko ? '성공 기준' : 'Success Criteria'}\n${bullets(seed.goals.map((goal) => ko ? `대상 사용자가 다음을 달성할 수 있습니다: ${goal}` : `The target user can achieve: ${goal}`))}\n\n## 11. ${ko ? '리스크' : 'Risks'}\n${bullets([...seed.assumptions.map((assumption) => ko ? `검증되지 않은 가정: ${assumption}` : `Unverified assumption: ${assumption}`), ...seed.openQuestions.filter((question) => question.status === 'open').map((question) => ko ? `오픈 질문: ${question.question}` : `Open question: ${question.question}`)])}\n\n## 12. ${ko ? '향후 기회' : 'Future Opportunities'}\n${bullets(future)}\n\n## 13. ${ko ? '오픈 질문' : 'Open Questions'}\n${openQuestions(seed)}\n`;
+  if (type === 'prd') return `# ${ko ? '제품 요구사항 문서' : 'Product Requirements Document'}\n\n## 1. ${ko ? '제품 개요' : 'Product Overview'}\n**${ko ? '이름' : 'Name'}:** ${seed.name}\n\n**${ko ? '한 줄 설명' : 'One-line'}:** ${seed.coreIdea}\n\n**${ko ? '비전' : 'Vision'}:** ${vision}\n\n**${ko ? '배경' : 'Background'}:** ${seed.problem || 'TBD'}\n\n## 2. ${ko ? '문제' : 'Problem'}\n${seed.problem || 'TBD'}\n\n## 3. ${ko ? '대상 사용자' : 'Target Users'}\n${bullets(seed.users)}\n\n## 4. ${ko ? '목표' : 'Goals'}\n${bullets(seed.goals)}\n\n## 5. ${ko ? '핵심 UX' : 'Core UX'}\n${uxEvidence}\n\n## 6. ${ko ? '제품 기능' : 'Product Features'}\n${bullets([...seed.goals, ...branches.filter((branch) => branch.status === 'active').map((branch) => `${branch.name}: ${branch.summary}`)])}\n\n## 7. ${ko ? 'MVP 범위' : 'MVP Scope'}\n- ${ko ? '필수' : 'Must'}: ${must.join('; ') || 'TBD'}\n- ${ko ? '권장' : 'Should'}: ${branches.filter((branch) => branch.status === 'active').map((branch) => branch.name).join('; ') || 'TBD'}\n- ${ko ? '향후' : 'Future'}: ${future.join('; ') || 'TBD'}\n\n## 8. ${ko ? '차별화' : 'Differentiation'}\n${branchLines(branches)}\n\n### ${ko ? '근거' : 'Evidence'}\n${researchLines(research, lang)}\n\n## 9. ${ko ? 'UX 원칙' : 'UX Principles'}\n${uxEvidence}\n\n## 10. ${ko ? '성공 기준' : 'Success Criteria'}\n${bullets(seed.goals.map((goal) => ko ? `대상 사용자가 다음을 달성할 수 있습니다: ${goal}` : `The target user can achieve: ${goal}`))}\n\n## 11. ${ko ? '리스크' : 'Risks'}\n${bullets([...seed.assumptions.map((assumption) => ko ? `검증되지 않은 가정: ${assumption}` : `Unverified assumption: ${assumption}`), ...seed.openQuestions.filter((question) => question.status === 'open').map((question) => ko ? `오픈 질문: ${question.question}` : `Open question: ${question.question}`)])}\n\n## 12. ${ko ? '향후 기회' : 'Future Opportunities'}\n${bullets(future)}\n\n## 13. ${ko ? '오픈 질문' : 'Open Questions'}\n${openQuestions(seed)}\n`;
   return renderTrd(seed, lang, context, future);
 }
 
