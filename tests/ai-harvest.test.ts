@@ -110,8 +110,12 @@ describe('AI harvest persistence', () => {
   it('uses user records and confirmed decisions, excluding pruned paths and AI summaries', async () => {
     const { root, store, state } = await project();
     try {
-      await addConversation(store, { seedId: state.id, role: 'assistant', type: 'question', content: 'What should users do?' });
-      await addConversation(store, { seedId: state.id, role: 'user', type: 'answer', content: 'Save the task' });
+      const question = await addConversation(store, { seedId: state.id, role: 'assistant', type: 'question', content: 'What should users do?' });
+      const answer = await addConversation(store, { seedId: state.id, role: 'user', type: 'answer', content: 'Save the task' });
+      // Equal millisecond timestamps cannot establish conversational order.
+      // Give this fixture an explicit question-before-answer chronology.
+      await store.appendConversation({ ...question, createdAt: '2026-01-01T00:00:00.000Z' });
+      await store.appendConversation({ ...answer, createdAt: '2026-01-01T00:00:01.000Z' });
       await addConversation(store, { seedId: state.id, role: 'user', type: 'answer', content: 'Make the question easier', metadata: { intent: 'change-question' } });
       await addConversation(store, { seedId: state.id, role: 'assistant', type: 'summary', content: 'AI_INVENTED_PAYMENTS' });
       await recordDecision(store, state, 'Use local files');
