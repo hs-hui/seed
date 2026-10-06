@@ -1,5 +1,6 @@
-import { appendFile, mkdir, readFile, rename, rm, stat, writeFile, copyFile, readdir } from 'node:fs/promises';
+import { appendFile, mkdir, open, readFile, rename, rm, stat, writeFile, copyFile, readdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import os from 'node:os';
 import path from 'node:path';
 
 export async function exists(filePath: string): Promise<boolean> {
@@ -10,6 +11,7 @@ export async function readJson<T>(filePath: string): Promise<T> { return JSON.pa
 const writeQueues = new Map<string, Promise<void>>();
 const appendQueues = new Map<string, Promise<void>>();
 const mutationQueues = new Map<string, Promise<unknown>>();
+const lockOwner = os.hostname() + ':' + process.pid;
 function queueKey(filePath: string): string {
   const resolved = path.resolve(filePath);
   return process.platform === 'win32' ? resolved.toLocaleLowerCase() : resolved;
@@ -18,7 +20,44 @@ function queueKey(filePath: string): string {
 export async function withKeyedLock<T>(filePath: string, action: () => Promise<T>): Promise<T> {
   const key = queueKey(filePath);
   const previous = mutationQueues.get(key) ?? Promise.resolve();
-  const operation = previous.catch(() => undefined).then(action);
+  const operation = previous.catch(() => undefined).then(async () => {
+    await ensureDir(path.dirname(key));
+    const lockPath = key + '.lock';
+    const token = randomUUID();
+    let handle: Awaited<ReturnType<typeof open>> | undefined;
+    while (!handle) {
+      try {
+        handle = await open(lockPath, 'wx');
+        await handle.writeFile(JSON.stringify({ owner: lockOwner, token, createdAt: Date.now() }));
+      } catch (error) {
+        if (handle) { await handle.close(); handle = undefined; await rm(lockPath, { force: true }); }
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        try {
+          const lock = JSON.parse(await readFile(lockPath, 'utf8')) as { owner?: string; createdAt?: number };
+          const [host, pidText] = (lock.owner ?? '').split(':');
+          const pid = Number(pidText);
+          let stale = false;
+          if (host === os.hostname() && Number.isInteger(pid) && pid > 0) {
+            try { process.kill(pid, 0); } catch (probeError) { stale = (probeError as NodeJS.ErrnoException).code === 'ESRCH'; }
+          } else stale = Date.now() - (lock.createdAt ?? 0) > 60_000;
+          if (stale) await rm(lockPath, { force: true });
+        } catch (readError) {
+          if ((readError as NodeJS.ErrnoException).code === 'ENOENT') continue;
+          try { if (Date.now() - (await stat(lockPath)).mtimeMs > 60_000) await rm(lockPath, { force: true }); }
+          catch { /* another process removed it */ }
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    }
+    try { return await action(); }
+    finally {
+      await handle.close();
+      try {
+        const lock = JSON.parse(await readFile(lockPath, 'utf8')) as { token?: string };
+        if (lock.token === token) await rm(lockPath, { force: true });
+      } catch { /* lock was already reclaimed */ }
+    }
+  });
   mutationQueues.set(key, operation);
   try { return await operation; }
   finally { if (mutationQueues.get(key) === operation) mutationQueues.delete(key); }
