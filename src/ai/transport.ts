@@ -243,7 +243,7 @@ export async function testProviderConnection(config: ProviderConfig, language: P
   if (!result.success) throw new Error(result.error ?? 'provider-connection-failed');
 }
 
-export async function getProvider(id?: string, model?: string, language: ProviderLanguage = 'en'): Promise<LLMProvider> {
+export async function getProvider(id?: string, model?: string, language: ProviderLanguage = 'en', generationDefaults: { maxTokens?: number } = {}): Promise<LLMProvider> {
   const config = await loadConfig();
   const selected = config.providers.find((provider) => provider.id === (id ?? config.activeProvider));
   if (id && !selected) throw new Error(`provider-not-configured:${id}`);
@@ -255,6 +255,7 @@ export async function getProvider(id?: string, model?: string, language: Provide
   // explicit configuration choice, not an implicit fallback.
   const key = useOAuth ? await getOpenAIToken() : providerKey(selected);
   const resolved = {
+    ...generationDefaults,
     ...selected,
     ...(selected.type === 'openai' && process.env.SEED_OPENAI_BASE_URL ? { baseUrl: process.env.SEED_OPENAI_BASE_URL } : {}),
     ...(model ? { defaultModel: model } : selected.type === 'openai' && useOAuth && process.env.SEED_OPENAI_OAUTH_MODEL

@@ -5,12 +5,12 @@ import type { Server } from 'node:http';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const tsxCli = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+const tsxLoader = pathToFileURL(path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'loader.mjs')).href;
 const entry = path.join(repoRoot, 'src', 'cli', 'index.ts');
 
 /**
@@ -20,6 +20,15 @@ const entry = path.join(repoRoot, 'src', 'cli', 'index.ts');
  * SEED_OPENAI_BASE_URL instead of relying on the retired local fallback.
  */
 function scriptedContent(promptText: string): string {
+  if (promptText.startsWith('HARVEST_DOCUMENT\n')) {
+    const request = JSON.parse(promptText.slice('HARVEST_DOCUMENT\n'.length)) as { sections: string[]; input: { evidence: Array<{ id: string; text: string }> } };
+    return JSON.stringify({ claims: request.input.evidence.map((entry, index) => ({ id: `c${index + 1}`, section: index === 0 ? 'overview' : 'requirements', text: entry.text, evidence: [{ sourceId: entry.id, quote: entry.text }] })),
+      missing: request.sections.filter((id) => id !== 'overview' && (id !== 'requirements' || request.input.evidence.length === 1)) });
+  }
+  if (promptText.startsWith('HARVEST_REVIEW\n')) {
+    const request = JSON.parse(promptText.slice('HARVEST_REVIEW\n'.length)) as { claims: Array<{ id: string }> };
+    return JSON.stringify({ verdicts: request.claims.map((claim) => ({ id: claim.id, supported: true })) });
+  }
   const value = (label: string): string => promptText.match(new RegExp(`(?:^|\\n)${label}:([^\\n]*)`))?.[1]?.trim() ?? '';
   if (promptText.includes('GROW_INPUT_CLASSIFY')) return JSON.stringify({ intent: 'answer' });
   if (promptText.includes('GROW_UPDATE')) {
@@ -101,7 +110,7 @@ describe('seed CLI end-to-end (scripted OpenAI provider)', () => {
   let mockServer: Server;
 
   const seed = async <T = unknown>(...args: string[]): Promise<T> => {
-    const { stdout } = await execFileAsync(process.execPath, [tsxCli, entry, ...args, '--json', '--no-input', '--provider', 'openai'], { cwd: work, env, timeout: 60_000, windowsHide: true });
+    const { stdout } = await execFileAsync(process.execPath, ['--import', tsxLoader, entry, ...args, '--json', '--no-input', '--provider', 'openai'], { cwd: work, env, timeout: 60_000, windowsHide: true });
     return JSON.parse(stdout) as T;
   };
 
@@ -146,7 +155,7 @@ describe('seed CLI end-to-end (scripted OpenAI provider)', () => {
   }, 60_000);
 
   it('harvests every document type and versions repeated harvests', async () => {
-    const rejected = await execFileAsync(process.execPath, [tsxCli, entry, 'harvest', 'all', '--json', '--no-input'], { cwd: work, env, timeout: 60_000, windowsHide: true }).then(
+    const rejected = await execFileAsync(process.execPath, ['--import', tsxLoader, entry, 'harvest', 'all', '--json', '--no-input'], { cwd: work, env, timeout: 60_000, windowsHide: true }).then(
       (value) => ({ code: 0, stdout: value.stdout }),
       (error: { code?: number; stdout?: string }) => ({ code: error.code ?? 1, stdout: error.stdout ?? '' }),
     );
@@ -183,7 +192,7 @@ describe('seed CLI end-to-end (scripted OpenAI provider)', () => {
   it('fails with a JSON error when no idea is given without input', async () => {
     const empty = path.join(root, 'empty');
     await mkdir(empty);
-    const result = await execFileAsync(process.execPath, [tsxCli, entry, '--json', '--no-input', '--provider', 'openai'], { cwd: empty, env, timeout: 60_000, windowsHide: true }).then(
+    const result = await execFileAsync(process.execPath, ['--import', tsxLoader, entry, '--json', '--no-input', '--provider', 'openai'], { cwd: empty, env, timeout: 60_000, windowsHide: true }).then(
       (value) => ({ code: 0, stdout: value.stdout }),
       (error: { code?: number; stdout?: string }) => ({ code: error.code ?? 1, stdout: error.stdout ?? '' }),
     );
@@ -225,7 +234,7 @@ describe('seed CLI end-to-end (scripted OpenAI provider)', () => {
 
     const conversationDir = path.join(work, '.seed', 'conversations');
     const beforeInvalidSelection = (await readdir(conversationDir)).length;
-    const invalid = await execFileAsync(process.execPath, [tsxCli, entry, 'branch', 'missing', '--json', '--no-input', '--provider', 'openai'], { cwd: work, env, timeout: 60_000, windowsHide: true }).then(
+    const invalid = await execFileAsync(process.execPath, ['--import', tsxLoader, entry, 'branch', 'missing', '--json', '--no-input', '--provider', 'openai'], { cwd: work, env, timeout: 60_000, windowsHide: true }).then(
       ({ stdout }) => ({ code: 0, stdout }),
       (error: { code?: number; stdout?: string }) => ({ code: error.code ?? 1, stdout: error.stdout ?? '' }),
     );

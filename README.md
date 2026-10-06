@@ -80,6 +80,10 @@ seed harvest all       # generate everything above at once
 
 Every harvest is saved to `.seed/harvest/` in your project folder, and running the same harvest again creates a new version (`prd-v1.md`, `prd-v2.md`, ...) instead of overwriting your previous one. Anything Seed doesn't know yet is marked `TBD` rather than invented.
 
+Harvest uses your configured AI provider to turn recorded answers and confirmed decisions into detailed user flows, interaction design, and requirements. Each paragraph includes source evidence. A separate AI review checks the complete paragraph against your records before it is saved; unsupported content, failed reviews, and provider errors stop generation without falling back to a template. AI summaries and research cannot authorize new features, and pruned directions are excluded. Missing technical choices remain `TBD`. AI review reduces unsupported additions but is not a guarantee of semantic correctness; review the document before implementation.
+
+For `all`, all six documents must pass generation and review before any are saved. If answers or decisions change during generation, Seed asks you to generate again using the latest records. `--draft` permits missing information, but does not bypass evidence checks.
+
 Seed checks the minimum recorded evidence for each document type. If something is missing, it lists what to add and writes nothing (`all` checks every type before writing). To save an incomplete version intentionally, use `seed harvest prd --draft` or `seed harvest all --draft`; incomplete documents are marked as drafts with their missing evidence.
 
 The `prompt` document is especially useful if you want an AI coding tool to build the project for you — hand it directly to Claude Code, Cursor, Codex, or a similar assistant.

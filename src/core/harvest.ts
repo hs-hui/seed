@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import { ensureDir, atomicWrite, listFiles } from '../utils/fs.js';
+import { ensureDir, atomicWrite, listFiles, withKeyedLock } from '../utils/fs.js';
+import { buildHarvestInput, generateHarvestDocument } from '../ai/harvest-document.js';
 import { Branch, ConversationEntry, HarvestResult, HarvestType, ResearchEntry, SeedState, now } from '../domain.js';
 import { SeedStore } from '../storage/store.js';
 import { addEvent } from './seed-manager.js';
@@ -259,7 +260,7 @@ function render(seed: SeedState, type: HarvestType, lang: 'en' | 'ko', context: 
   return renderTrd(seed, lang, context, future);
 }
 
-async function harvestOneUnlocked(store: SeedStore, seed: SeedState, type: HarvestType, lang: 'en' | 'ko', draft: boolean): Promise<string> {
+async function harvestOneUnlocked(store: SeedStore, seed: SeedState, type: HarvestType, lang: 'en' | 'ko', draft: boolean, generated?: string): Promise<string> {
   const dir = path.join(store.base, 'harvest'); await ensureDir(dir);
   const existing = (await listFiles(dir)).filter((file) => new RegExp(`${type}-v\\d+\\.md$`).test(file));
   // Use the highest existing version rather than the file count. This keeps
@@ -271,9 +272,9 @@ async function harvestOneUnlocked(store: SeedStore, seed: SeedState, type: Harve
   const file = path.join(dir, `${type}-v${version}.md`);
   const [research, branches, conversations] = await Promise.all([store.research(seed.id), store.branches(seed.id), store.conversations(seed.id)]);
   const context = { research, branches, conversations };
-  const rendered = harvestLanguage.run(lang, () => render(seed, type, lang, context));
+  const rendered = generated ?? harvestLanguage.run(lang, () => render(seed, type, lang, context));
   let content = rendered;
-  if (type === 'prd') {
+  if (type === 'prd' && generated === undefined) {
     // A PRD harvest should show where its claims came from, not only the
     // polished summary. Keep the maturity snapshot and the user's answers
     // beside the research and confirmed decisions.
@@ -309,7 +310,29 @@ async function harvestOne(store: SeedStore, seed: SeedState, type: HarvestType, 
   try { return await operation; }
   finally { if (harvestQueues.get(key) === operation) harvestQueues.delete(key); }
 }
-export async function harvest(store: SeedStore, seed: SeedState, type: HarvestType | 'all', lang: 'en' | 'ko', options: { draft?: boolean } = {}): Promise<string | string[]> {
+export async function harvest(store: SeedStore, seed: SeedState, type: HarvestType | 'all', lang: 'en' | 'ko', options: { draft?: boolean; ai?: boolean; providerId?: string; model?: string } = {}): Promise<string | string[]> {
+  if (options.ai) {
+    const statePath = path.join(store.base, 'seed.json');
+    const snapshot = async () => {
+      const current = await store.load();
+      const [branches, conversations] = await Promise.all([store.branches(current.id), store.conversations(current.id)]);
+      return { seed: current, branches, conversations };
+    };
+    const captured = await withKeyedLock(statePath, snapshot);
+    if (captured.seed.status === 'dormant') throw new Error('seed-dormant');
+    const types = type === 'all' ? harvestTypes : [type];
+    if (!options.draft && types.some((entry) => !assessHarvestReadiness(captured.seed, entry).ready)) throw new Error('harvest-not-ready');
+    const input = buildHarvestInput(captured.seed, captured.branches, captured.conversations);
+    const documents = new Map<HarvestType, string>();
+    // Generate AND verify the entire batch before saving the first file.
+    for (const entry of types) documents.set(entry, await generateHarvestDocument(captured.seed, entry, lang, input, options));
+    return withKeyedLock(statePath, async () => {
+      if (JSON.stringify(await snapshot()) !== JSON.stringify(captured)) throw new Error('harvest-evidence-changed');
+      const files: string[] = [];
+      for (const entry of types) files.push(await harvestOneUnlocked(store, captured.seed, entry, lang, options.draft ?? false, documents.get(entry)));
+      return type === 'all' ? files : files[0]!;
+    });
+  }
   if (type === 'all') {
     // Each harvest writes the seed status/history. Serialize the documents so
     // Windows atomic renames cannot race on the shared seed.json file.

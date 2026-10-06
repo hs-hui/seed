@@ -117,6 +117,10 @@ function run(action: () => Promise<void>, options: CommonOptions = {}): Promise<
     else if (message === 'ai-provider-required') console.error(t('error.aiProviderRequired'));
     else if (message === 'ai-provider-unavailable') console.error(t('error.aiProviderUnavailable'));
     else if (message === 'ai-response-invalid') console.error(t('error.aiResponseInvalid'));
+    else if (message === 'harvest-unsupported-content') console.error(t('error.harvestUnsupportedContent'));
+    else if (message === 'harvest-evidence-changed') console.error(t('error.harvestEvidenceChanged'));
+    else if (message === 'harvest-evidence-required') console.error(t('error.harvestEvidenceRequired'));
+    else if (message === 'harvest-evidence-too-large') console.error(t('error.harvestEvidenceTooLarge'));
     else if (message.startsWith('ai-connection-failed:')) console.error(t('error.aiConnectionFailed', { message: message.slice('ai-connection-failed:'.length) }));
     else if (message === 'water-lens-not-found') console.error(t('error.waterLensNotFound'));
     else if (message === 'evolve-selection-not-found') console.error(t('error.evolveSelectionNotFound'));
