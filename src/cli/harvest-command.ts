@@ -40,7 +40,7 @@ export function registerHarvestCommand(program: Command, deps: {
       process.exitCode = 1;
       return;
     }
-    const file = await harvest(store, seed, type, currentLanguage(), { draft: options.draft });
+    const file = await harvest(store, seed, type, currentLanguage(), { draft: options.draft, ai: true, providerId: options.provider, model: options.model });
     print(options.json ? { type, file } : t('harvest.saved', { type: harvestTitle(type, currentLanguage()), file: Array.isArray(file) ? file.join(', ') : file }), Boolean(options.json));
   }, options));
 }
