@@ -514,7 +514,8 @@ describe('Seed MVP flow', () => {
       const prd = await readFile(prdFile as string, 'utf8');
       const trd = await readFile(trdFile as string, 'utf8');
       expect(prd).toContain('제품 요구사항 문서');
-      expect(prd).toContain('사용자가 구체적인 상황을 설명합니다.');
+      expect(prd).toContain('제품의 사용자 흐름과 UX 요구사항이 기록되지 않았습니다.');
+      expect(prd).not.toContain('Seed가 한 번에 하나의 핵심 질문을 합니다.');
       expect(prd).toContain('기록된 브랜치가 없습니다.');
       expect(prd).toContain('확정된 결정');
       expect(trd).toContain('기술 요구사항 문서');
@@ -587,7 +588,7 @@ describe('Seed MVP flow', () => {
       await expect(createBranch(store, latest, 'Overflow', 'Too broad')).rejects.toThrow('too-many-branches');
       expect((await store.branches(seed.id)).filter((branch) => branch.status === 'active')).toHaveLength(5);
       await expect(createBranch(store, seed, 'Stale overflow', 'Should still see five active branches')).rejects.toThrow('too-many-branches');
-      const pruned = await pruneItem(store, latest, current.id); expect(pruned.activeBranch).not.toBe(current.id); expect((await store.branches(seed.id)).find((branch) => branch.id === current.id)?.status).toBe('pruned'); expect(pruned.coreIdea).toContain('For the first version, we can leave');
+      const pruned = await pruneItem(store, latest, current.id); expect(pruned.activeBranch).not.toBe(current.id); expect((await store.branches(seed.id)).find((branch) => branch.id === current.id)?.status).toBe('pruned'); expect(pruned.coreIdea).toBe(latest.coreIdea);
       const repeated = await pruneItem(store, await store.load(), current.id); expect(repeated.maturity).toBe(pruned.maturity);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
@@ -815,3 +816,4 @@ describe('Seed MVP flow', () => {
     } finally { process.chdir(previousCwd); await rm(root, { recursive: true, force: true }); }
   });
 });
+
