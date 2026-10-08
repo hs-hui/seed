@@ -217,15 +217,18 @@ describe('config persistence keeps provider definitions global', () => {
     await expect(stat(path.join(work, '.seed'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('gives the global config a default provider when the first setup runs inside a project', async () => {
+  it('gives the global config a default provider and language when the first setup runs inside a project', async () => {
     await enterProject();
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
     vi.mocked(select).mockResolvedValueOnce('custom');
     vi.mocked(input).mockResolvedValueOnce('team-llm').mockResolvedValueOnce('https://llm.user.test/v1').mockResolvedValueOnce('team-model');
+    setLanguage('ko');
     await configWizard();
     expect(sent.map((request) => request.url)).toEqual(['https://llm.user.test/v1/chat/completions']);
-    expect(await readJsonFile(globalFile())).toMatchObject({ version: 1, activeProvider: 'team-llm', setupCompleted: true, providers: [expect.objectContaining({ id: 'team-llm', type: 'custom', baseUrl: 'https://llm.user.test/v1' })] });
-    expect(await readJsonFile(projectFile())).toEqual({ lang: 'en', activeProvider: 'team-llm' });
+    // setupCompleted is global, so the chosen language must be too; otherwise
+    // the next run elsewhere would skip setup and fall back to English.
+    expect(await readJsonFile(globalFile())).toMatchObject({ version: 1, lang: 'ko', activeProvider: 'team-llm', setupCompleted: true, providers: [expect.objectContaining({ id: 'team-llm', type: 'custom', baseUrl: 'https://llm.user.test/v1' })] });
+    expect(await readJsonFile(projectFile())).toEqual({ lang: 'ko', activeProvider: 'team-llm' });
   });
 
   it('routes config command changes made inside a project to the file that owns them', async () => {

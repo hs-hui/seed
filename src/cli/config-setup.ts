@@ -28,9 +28,12 @@ export async function configuredCredential(provider: ProviderConfig): Promise<st
 export async function persistConfig(config: GlobalConfig): Promise<void> {
   if (!(await projectConfigPath())) { await saveConfig(config); return; }
   const global = await loadGlobalConfig();
-  // A first setup run inside a project still needs a usable global default.
+  // A first setup run inside a project still needs usable global defaults:
+  // setupCompleted is saved globally, so later runs elsewhere will not ask
+  // for the language again and must not silently fall back to English.
   const keepActive = config.providers.some((provider) => provider.id === global.activeProvider && provider.enabled !== false);
-  await saveConfig({ ...global, version: config.version, setupCompleted: config.setupCompleted, providers: config.providers, activeProvider: keepActive ? global.activeProvider : config.activeProvider });
+  await saveConfig({ ...global, version: config.version, setupCompleted: config.setupCompleted, providers: config.providers,
+    activeProvider: keepActive ? global.activeProvider : config.activeProvider, lang: global.lang ?? config.lang });
   await saveProjectConfig(config);
 }
 
