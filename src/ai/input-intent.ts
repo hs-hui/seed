@@ -282,7 +282,10 @@ function complainsAboutQuestionAfterLeadIn(text: string, compact: string): boole
  */
 export function detectGrowthInputIntent(value: string): GrowthInputIntent {
   const { text, compact } = normalize(value);
-  if (!text) return 'pause';
+  // Only an empty reply pauses (the prompt says "press Enter without an
+  // answer to pause"). "?", "ㅠㅠ" or "…" is a reaction without content, so
+  // offer an easier question instead of ending the session.
+  if (!text) return value.trim() ? 'change-question' : 'pause';
   // Explicit controls are short; a long reply is content however it starts.
   if (text.length > 120) return 'answer';
   const readings: Array<[string[], Grammar]> = [[[...compact], KOREAN], [text.split(' '), ENGLISH]];

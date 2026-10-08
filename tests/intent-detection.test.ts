@@ -117,6 +117,14 @@ describe('explicit growth controls', () => {
       expect(isGrowthPauseRequest(request), request).toBe(true);
     }
   });
+
+  it('pauses only on an empty reply and offers another question for a content-free reaction', () => {
+    for (const empty of ['', '   ']) expect(detectGrowthInputIntent(empty), JSON.stringify(empty)).toBe('pause');
+    for (const reaction of ['ㅋㅋㅋ', 'ㅎㅎ', 'ㅠㅠ', 'ㅜㅜ', '?', '???', '...', '…']) {
+      expect(detectGrowthInputIntent(reaction), reaction).toBe('change-question');
+      expect(isGrowthPauseRequest(reaction), reaction).toBe(false);
+    }
+  });
 });
 
 describe('classifyGrowthInput', () => {
