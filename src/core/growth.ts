@@ -182,32 +182,27 @@ async function applyGrowthUnlocked(store: SeedStore, seed: SeedState, answer: st
   const update = await coreAI.growthUpdate(workingSeed, trimmed, providerId, model, language, conversations, currentBranch, { relevantHistory, sunlightResearch });
   const openQuestions = seed.openQuestions.map((question) => question.question === asked?.content && question.status === 'open' && question.branchId === branchId
     ? { ...question, status: 'answered' as const, answer: trimmed, answeredAt: now() } : question);
-  const askedText = asked?.content.toLowerCase() ?? '';
   // Older state files may contain an open question without the optional
   // focus metadata. Fall back to the next required field so its answer is
   // still filed in the right part of the seed instead of becoming a goal by
   // accident.
   const focus = askedQuestion?.focus ?? requiredFocus(seed);
-  // "사용자" appears in many outcome questions, so only classify a
-  // response as a user definition when the question asks who/which person.
-  const asksUser = focus === 'user' || askedText.includes('who') || /누구|누가|대상/.test(askedText);
-  const asksProblem = focus === 'problem' || askedText.includes('problem') || /문제|어려|고통|힘든|답답|불편/.test(askedText);
-  const asksConstraint = focus === 'constraint' || askedText.includes('constraint') || /제약|범위|제한|줄여|남기|첫 버전|처음/.test(askedText);
-  const asksAssumption = focus === 'assumption' || askedText.includes('assumption') || /가정|전제|검증|확인해야/.test(askedText);
-  const asksGoal = focus === 'goal' || (!focus && !asksUser && !asksProblem && !asksConstraint && !asksAssumption);
-  const resolvedFocus = focus ?? (asksUser ? 'user' : asksProblem ? 'problem' : asksGoal ? 'goal' : asksConstraint ? 'constraint' : asksAssumption ? 'assumption' : 'validation');
-  const users = !currentBranch && asksUser && !seed.users.includes(trimmed) ? [...seed.users, trimmed.slice(0, 120)] : seed.users;
-  const problem = !currentBranch && asksProblem && !seed.problem ? trimmed : seed.problem;
-  const constraints = !currentBranch && asksConstraint && !seed.constraints.includes(trimmed) ? [...seed.constraints, trimmed.slice(0, 160)] : seed.constraints;
-  const assumptions = !currentBranch && asksAssumption && !seed.assumptions.includes(trimmed) ? [...seed.assumptions, trimmed.slice(0, 160)] : seed.assumptions;
-  const goals = !currentBranch && asksGoal && !seed.goals.includes(trimmed)
+  // File the answer under its question's focus only. Words such as "처음" or
+  // "who" also appear in questions about other fields, and filing one answer
+  // twice would skip a later question and overstate maturity. A validation
+  // answer stays in the conversation and its answered question.
+  const users = !currentBranch && focus === 'user' && !seed.users.includes(trimmed) ? [...seed.users, trimmed.slice(0, 120)] : seed.users;
+  const problem = !currentBranch && focus === 'problem' && !seed.problem ? trimmed : seed.problem;
+  const constraints = !currentBranch && focus === 'constraint' && !seed.constraints.includes(trimmed) ? [...seed.constraints, trimmed.slice(0, 160)] : seed.constraints;
+  const assumptions = !currentBranch && focus === 'assumption' && !seed.assumptions.includes(trimmed) ? [...seed.assumptions, trimmed.slice(0, 160)] : seed.assumptions;
+  const goals = !currentBranch && focus === 'goal' && !seed.goals.includes(trimmed)
     ? [...seed.goals, trimmed.slice(0, 160)] : seed.goals;
   const updated: SeedState = currentBranch
     ? { ...seed, openQuestions, updatedAt: now() }
     : { ...seed, coreIdea: update.updatedSummary, problem, users, goals, constraints, assumptions, openQuestions,
       maturity: seed.maturity, status: seed.status === 'seedling' ? 'growing' : seed.status, updatedAt: now() };
   if (!currentBranch) {
-    updated.maturityDimensions = coreAI.dimensionsFor(updated, resolvedFocus, update.maturityDelta, language);
+    updated.maturityDimensions = coreAI.dimensionsFor(updated, focus, update.maturityDelta, language);
     // A completed, non-empty turn is evidence of progress. The dimension
     // average remains the source of truth, but rounding/another dimension's
     // low score must not make a useful answer look like it made no progress.
@@ -225,7 +220,7 @@ async function applyGrowthUnlocked(store: SeedStore, seed: SeedState, answer: st
     if (branch) {
       const branchQuestions = branch.openQuestions.map((question) => question.question === asked?.content && question.status === 'open'
         ? { ...question, status: 'answered' as const, answer: trimmed, answeredAt: now() } : question);
-      const branchAssumptions = asksAssumption && !branch.assumptions.includes(trimmed) ? [...branch.assumptions, trimmed.slice(0, 160)] : branch.assumptions;
+      const branchAssumptions = focus === 'assumption' && !branch.assumptions.includes(trimmed) ? [...branch.assumptions, trimmed.slice(0, 160)] : branch.assumptions;
       await store.saveBranch({ ...branch, summary: update.updatedSummary, maturity: Math.min(100, branch.maturity + update.maturityDelta), assumptions: branchAssumptions, openQuestions: branchQuestions, updatedAt: now() });
     }
   }
