@@ -139,24 +139,40 @@ export async function projectConfigPath(start = process.cwd()): Promise<string |
   const projectRoot = await findSeedRoot(start);
   return projectRoot ? path.join(projectRoot, '.seed', 'config.json') : undefined;
 }
-export async function loadConfig(): Promise<GlobalConfig> {
+/** Read only the user-owned global config, the sole source of provider definitions. */
+export async function loadGlobalConfig(): Promise<GlobalConfig> {
   const file = await configPath();
   let global: GlobalConfig = { ...defaultConfig, providers: [...defaultConfig.providers] };
   if (await exists(file)) {
     try { const parsed = await readJson<Partial<GlobalConfig>>(file); global = { ...global, ...parsed, providers: parsed.providers ?? global.providers }; } catch { /* fall back to defaults */ }
   }
+  return normalizeConfig(global);
+}
+export async function loadConfig(): Promise<GlobalConfig> {
+  const global = await loadGlobalConfig();
   const projectRoot = await findSeedRoot(process.cwd()) ?? process.cwd();
   const projectFile = path.join(projectRoot, '.seed', 'config.json');
   if (await exists(projectFile)) {
-    try { const project = await readJson<Partial<GlobalConfig>>(projectFile); return normalizeConfig({ ...global, ...project, providers: project.providers ?? global.providers }); } catch { /* ignore invalid project override */ }
+    try {
+      // A project file can arrive with a cloned repository, and a provider
+      // definition decides where environment API keys are sent. Honour only
+      // the language and a choice among the user's own enabled providers.
+      const { lang, activeProvider } = await readJson<{ lang?: unknown; activeProvider?: unknown } | null>(projectFile) ?? {};
+      return {
+        ...global,
+        ...(lang === 'ko' || lang === 'en' ? { lang } : {}),
+        ...(typeof activeProvider === 'string' && global.providers.some((provider) => provider.id === activeProvider && provider.enabled) ? { activeProvider } : {}),
+      };
+    } catch { /* ignore invalid project override */ }
   }
-  return normalizeConfig(global);
+  return global;
 }
 export async function saveConfig(config: GlobalConfig): Promise<void> { await atomicWrite(await configPath(), `${JSON.stringify(normalizeConfig(config), null, 2)}\n`); }
-/** Save a project-scoped override without ever writing credentials. */
+/** Save a project-scoped override: only the language and the active provider choice. */
 export async function saveProjectConfig(config: GlobalConfig, start = process.cwd()): Promise<boolean> {
   const file = await projectConfigPath(start);
   if (!file) return false;
-  await atomicWrite(file, `${JSON.stringify(normalizeConfig(config), null, 2)}\n`);
+  const { lang, activeProvider } = normalizeConfig(config);
+  await atomicWrite(file, `${JSON.stringify({ ...(lang ? { lang } : {}), ...(activeProvider ? { activeProvider } : {}) }, null, 2)}\n`);
   return true;
 }

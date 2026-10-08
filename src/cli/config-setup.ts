@@ -1,6 +1,6 @@
 import { input, select } from '@inquirer/prompts';
 import { currentLanguage, t } from '../i18n/index.js';
-import { loadConfig, saveConfig, saveProjectConfig, type GlobalConfig, type ProviderConfig } from '../storage/store.js';
+import { loadConfig, loadGlobalConfig, projectConfigPath, saveConfig, saveProjectConfig, type GlobalConfig, type ProviderConfig } from '../storage/store.js';
 import { DEFAULT_OPENAI_MODEL, DEFAULT_OPENAI_OAUTH_MODEL, providerKey, testProviderConnection } from '../ai/provider.js';
 import { getOpenAIToken, loginOpenAI } from '../ai/openai-oauth.js';
 
@@ -20,10 +20,18 @@ export async function configuredCredential(provider: ProviderConfig): Promise<st
   if (provider.type === 'openai' && provider.connectionMode === 'oauth') return getOpenAIToken();
   return providerKey(provider);
 }
-/** Persist settings locally when running inside a Seed project. */
+/**
+ * Persist settings. Inside a Seed project only the language and the provider
+ * choice stay local; provider definitions decide where API keys are sent, so
+ * they always go to the user-owned global config.
+ */
 export async function persistConfig(config: GlobalConfig): Promise<void> {
-  const savedToProject = await saveProjectConfig(config);
-  if (!savedToProject) await saveConfig(config);
+  if (!(await projectConfigPath())) { await saveConfig(config); return; }
+  const global = await loadGlobalConfig();
+  // A first setup run inside a project still needs a usable global default.
+  const keepActive = config.providers.some((provider) => provider.id === global.activeProvider && provider.enabled !== false);
+  await saveConfig({ ...global, version: config.version, setupCompleted: config.setupCompleted, providers: config.providers, activeProvider: keepActive ? global.activeProvider : config.activeProvider });
+  await saveProjectConfig(config);
 }
 
 export async function configWizard(): Promise<void> {

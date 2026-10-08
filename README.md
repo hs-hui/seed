@@ -126,7 +126,7 @@ This opens a short setup wizard where you can choose:
 - **Anthropic Claude** — API key
 - **A custom provider** — any OpenAI-compatible API (OpenRouter, Groq, a self-hosted model, etc.)
 
-API keys are only ever read from environment variables and are never written to disk. You can switch providers at any time with `seed config use <provider>`. If a request fails — a bad key, a network problem, or the provider itself is down — Seed stops and tells you exactly what went wrong instead of silently guessing; just fix the issue and try again.
+API keys are only ever read from environment variables and are never written to disk. Provider settings are stored in `~/.seed/config.json`, and a project's `.seed/config.json` can only set the language and choose one of the providers you configured. You can switch providers at any time with `seed config use <provider>`. If a request fails — a bad key, a network problem, or the provider itself is down — Seed stops and tells you exactly what went wrong instead of silently guessing; just fix the issue and try again.
 
 ```bash
 seed config list        # see what's configured
