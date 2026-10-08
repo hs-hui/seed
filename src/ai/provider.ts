@@ -33,14 +33,6 @@ function isSimpleAcknowledgement(value: string): boolean {
 }
 
 /**
- * Keep a conservative intent safety net alongside the model classifier. This
- * prevents callers that use `classifyGrowthInput` directly from storing an
- * obvious help request as product content while preserving normal answers.
- */
-function localGrowthInputIntent(value: string): GrowthInputIntent {
-  return detectGrowthInputIntent(value);
-}
-/**
  * UI language and idea language are intentionally separate. English is the
  * CLI default, but a Korean idea should still receive Korean AI content when
  * the user did not add an explicit language flag.
@@ -66,10 +58,13 @@ export function inferProviderLanguage(preferred: ProviderLanguage, texts: string
 
 
 /**
- * Let a configured model catch conversational intent that cannot be safely
- * enumerated with keyword rules (for example, “I am not sure what you want
- * from me”). Deterministic callers still handle explicit controls first, and
- * a provider failure falls back to the same conservative local safety net.
+ * Explicit controls ("skip", "모르겠어요", "later") are settled locally without
+ * a provider call. Everything else goes to the configured model, which also
+ * sees the question: an ordinary answer can start like a control ("Later in
+ * the evening…", "예를 들어…"), and a help request such as “I am not sure what
+ * you want from me” cannot be enumerated. Output that names no intent keeps
+ * the reply as an answer; a provider failure throws instead of being guessed
+ * at locally.
  */
 export async function classifyGrowthInput(
   answer: string,
@@ -80,16 +75,11 @@ export async function classifyGrowthInput(
 ): Promise<GrowthInputIntent> {
   if (!answer.trim()) return 'pause';
   if (isSimpleAcknowledgement(answer)) return 'answer';
+  const explicitIntent = detectGrowthInputIntent(answer);
+  if (explicitIntent !== 'answer') return explicitIntent;
   const contentLanguage = inferProviderLanguage(language, [answer]);
-  const safetyIntent = localGrowthInputIntent(answer);
   const provider = await getProvider(providerId, model, contentLanguage);
-  const response = await provider.ask(growthIntentPrompt(question, answer));
-  const modelIntent = normalizeGrowthInputIntent(response);
-  // A model may over-trust a short phrase as idea content. Never let that
-  // override a deterministic, obvious request to simplify or change the
-  // question; otherwise a beginner's help request would pollute the idea.
-  if (safetyIntent !== 'answer' && modelIntent === 'answer') return safetyIntent;
-  return modelIntent ?? safetyIntent;
+  return normalizeGrowthInputIntent(await provider.ask(growthIntentPrompt(question, answer))) ?? 'answer';
 }
 
 function requiredGrowthFocus(seed: SeedState): GrowthFocus {
