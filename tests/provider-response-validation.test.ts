@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { growthUpdate, suggestBranches, suggestPrune } from '../src/ai/provider.js';
+import { growthUpdate, nextQuestion, suggestBranches, suggestPrune } from '../src/ai/provider.js';
 import { createSeed } from '../src/domain.js';
 
 async function withMockedOpenAI<T>(responseContent: string, run: () => Promise<T>): Promise<T> {
@@ -71,6 +71,19 @@ describe('provider response validation', () => {
     const response = JSON.stringify({ updatedSummary: '   ', questionReason: 'Reflected.', maturityDelta: 3 });
     await expect(withMockedOpenAI(response, () => growthUpdate(seed, 'Students need a shorter study session.', 'openai', undefined, 'en'))).rejects.toThrow('ai-response-invalid');
     await expect(withMockedOpenAI('{"maturityDelta":3}', () => growthUpdate(seed, 'Students need a shorter study session.', 'openai', undefined, 'en'))).rejects.toThrow('ai-response-invalid');
+  });
+
+  it('keeps a valid AI question when the provider omits focus', async () => {
+    const response = JSON.stringify({ question: 'Who would use this study app first?', maturityDelta: 4 });
+    const question = await withMockedOpenAI(response, () => nextQuestion(seed, 'openai', undefined, 'en'));
+    expect(question).toEqual({ question: 'Who would use this study app first?', maturityDelta: 4, focus: 'user' });
+  });
+
+  it('still replaces an omitted-focus question that fails the jargon check', async () => {
+    const response = JSON.stringify({ question: 'Which MVP roadmap milestone matters first?', maturityDelta: 3 });
+    const question = await withMockedOpenAI(response, () => nextQuestion(seed, 'openai', undefined, 'en'));
+    expect(question.question).not.toContain('MVP');
+    expect(question.focus).toBe('user');
   });
 
   it('accepts a growth reply that uses the summary field', async () => {

@@ -125,7 +125,9 @@ export async function nextQuestion(seed: SeedState, providerId?: string, model?:
     const parsedDelta = typeof parsed.maturityDelta === 'number' ? parsed.maturityDelta : Number(parsed.maturityDelta);
     const delta = Number.isFinite(parsedDelta) ? parsedDelta : 3;
     const focus = typeof parsed.focus === 'string' && growthFocuses.includes(parsed.focus as GrowthFocus) ? parsed.focus as GrowthFocus : undefined;
-    if (focus !== required) {
+    // An omitted focus is not a mismatch: keep the valid AI question and label
+    // it with the required focus, which is what the caller expects.
+    if (focus && focus !== required) {
       return { question: unusedSafeQuestion(contentLanguage, required, allSeenQuestions), maturityDelta: 3, focus: required };
     }
     const sanitized = sanitizeQuestion(parsed.question);
