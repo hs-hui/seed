@@ -141,22 +141,24 @@ export class OpenAICompatibleProvider implements LLMProvider {
   }
   private async askGemini(prompt: string): Promise<string> {
     const base = (this.config.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '');
-    const endpoint = `${base}/models/${encodeURIComponent(this.config.defaultModel)}:generateContent?key=${encodeURIComponent(this.apiKey)}`;
+    const endpoint = `${base}/models/${encodeURIComponent(this.config.defaultModel)}:generateContent`;
     const data = await requestJson<{ candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }>(endpoint, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      // The key travels in a header: URL query strings end up in proxy and access logs.
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': this.apiKey },
       body: JSON.stringify({ contents: [{ parts: [{ text: `${providerInstructions(this.language)}\n\n${prompt}` }] }], ...(this.config.temperature !== undefined || this.config.maxTokens ? { generationConfig: { ...(this.config.temperature !== undefined ? { temperature: this.config.temperature } : {}), ...(this.config.maxTokens ? { maxOutputTokens: this.config.maxTokens } : {}) } } : {}) }),
     }, this.config.name);
     return data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? '';
   }
   private async chatGemini(messages: ProviderMessage[]): Promise<string> {
     const base = (this.config.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '');
-    const endpoint = `${base}/models/${encodeURIComponent(this.config.defaultModel)}:generateContent?key=${encodeURIComponent(this.apiKey)}`;
+    const endpoint = `${base}/models/${encodeURIComponent(this.config.defaultModel)}:generateContent`;
     const system = [providerInstructions(this.language), ...messages.filter((message) => message.role === 'system').map((message) => message.content)].join('\n\n');
     const contents = normalizeProviderTurns(messages).map((message) => ({
       role: message.role === 'assistant' ? 'model' : 'user', parts: [{ text: message.content }],
     }));
     const data = await requestJson<{ candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }>(endpoint, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      // The key travels in a header: URL query strings end up in proxy and access logs.
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': this.apiKey },
       body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, ...(this.config.temperature !== undefined || this.config.maxTokens ? { generationConfig: { ...(this.config.temperature !== undefined ? { temperature: this.config.temperature } : {}), ...(this.config.maxTokens ? { maxOutputTokens: this.config.maxTokens } : {}) } } : {}) }),
     }, this.config.name);
     return data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? '';

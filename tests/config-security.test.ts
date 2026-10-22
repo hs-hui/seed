@@ -52,14 +52,15 @@ async function enterProject(): Promise<void> {
   await plant(new SeedStore(work), 'A cloned idea');
   process.chdir(work);
 }
-/** The key a request carries: an OpenAI bearer token, Anthropic header or Gemini query. */
+/** The key a request carries: an OpenAI bearer token, Anthropic header or Gemini header. */
 function keyIn(request: SentRequest): string | null {
-  return request.headers.authorization?.replace(/^Bearer /, '') ?? request.headers['x-api-key'] ?? new URL(request.url).searchParams.get('key');
+  return request.headers.authorization?.replace(/^Bearer /, '') ?? request.headers['x-api-key'] ?? request.headers['x-goog-api-key'] ?? null;
 }
 function expectKeySentOnlyTo(base: string): void {
   expect(sent.length).toBeGreaterThan(0);
   for (const request of sent) {
     expect(request.url.startsWith(`${base}/`), request.url).toBe(true);
+    expect(new URL(request.url).searchParams.has('key'), request.url).toBe(false);
     expect(keyIn(request)).toBe(KEY);
   }
   expect(JSON.stringify(sent)).not.toContain(COLLECTOR);
