@@ -118,9 +118,9 @@ describe('AI harvest persistence', () => {
       await store.appendConversation({ ...answer, createdAt: '2026-01-01T00:00:01.000Z' });
       await addConversation(store, { seedId: state.id, role: 'user', type: 'answer', content: 'Make the question easier', metadata: { intent: 'change-question' } });
       await addConversation(store, { seedId: state.id, role: 'assistant', type: 'summary', content: 'AI_INVENTED_PAYMENTS' });
-      await recordDecision(store, state, 'Use local files');
+      await recordDecision(store, 'Use local files');
       const branch = await createBranch(store, state, 'Payments', 'Subscriptions');
-      await recordDecision(store, state, 'BRANCH_DECISION', '', branch.id);
+      await recordDecision(store, 'BRANCH_DECISION', '', branch.id);
       await addConversation(store, { seedId: state.id, branchId: branch.id, role: 'user', type: 'answer', content: 'BRANCH_ANSWER' });
       await pruneItem(store, state, branch.id);
       const evidence = buildHarvestInput(await store.load(), await store.branches(state.id), await store.conversations(state.id));
@@ -159,7 +159,7 @@ describe('AI harvest persistence', () => {
   it('rejects stale AI documents when a decision is made during generation', async () => {
     const { root, store, state } = await project();
     installProvider(async (messages) => {
-      if (messages.at(-1)!.content.startsWith('HARVEST_REVIEW')) await recordDecision(store, state, 'Do not add notifications');
+      if (messages.at(-1)!.content.startsWith('HARVEST_REVIEW')) await recordDecision(store, 'Do not add notifications');
       return respond(messages);
     });
     try {

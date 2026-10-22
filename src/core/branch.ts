@@ -7,7 +7,7 @@ import type { ProviderLanguage } from '../ai/contracts.js';
 import path from 'node:path';
 import { withKeyedLock } from '../utils/fs.js';
 
-async function createBranchUnlocked(store: SeedStore, seed: SeedState, name: string, summary: string, providerId?: string): Promise<Branch> {
+async function createBranchUnlocked(store: SeedStore, name: string, summary: string, providerId?: string): Promise<Branch> {
   const currentSeed = await store.load();
   if (currentSeed.status === 'dormant') throw new Error('seed-dormant');
   if (!name.trim()) throw new Error('branch-name-required');
@@ -19,12 +19,13 @@ async function createBranchUnlocked(store: SeedStore, seed: SeedState, name: str
   await store.saveBranch(branch); const updated = { ...currentSeed, branches: [...currentSeed.branches, branch.id], activeBranch: branch.id, status: nextStatus(currentSeed.status, 'branching'), updatedAt: now() };
   await store.save(updated); await addEvent(store, updated, 'branch', `Branch created: ${name}`, { branchId: branch.id }); return branch;
 }
-export async function createBranch(store: SeedStore, seed: SeedState, name: string, summary: string, providerId?: string): Promise<Branch> {
-  return withKeyedLock(path.join(store.base, 'seed.json'), () => createBranchUnlocked(store, seed, name, summary, providerId));
+// Unused: the stored state is authoritative and is reloaded under the lock.
+export async function createBranch(store: SeedStore, _seed: SeedState, name: string, summary: string, providerId?: string): Promise<Branch> {
+  return withKeyedLock(path.join(store.base, 'seed.json'), () => createBranchUnlocked(store, name, summary, providerId));
 }
 export async function branchSuggestions(seed: SeedState, providerId?: string, model?: string, language: ProviderLanguage = 'en'): Promise<Array<{ name: string; summary: string }>> { return coreAI.suggestBranches(seed, providerId, model, language); }
 export async function pruneSuggestions(seed: SeedState, providerId?: string, model?: string, language: ProviderLanguage = 'en'): Promise<Array<{ item: string; reason: string }>> { return coreAI.suggestPrune(seed, providerId, model, language); }
-async function pruneItemUnlocked(store: SeedStore, seed: SeedState, item: string, language: 'en' | 'ko' = 'en'): Promise<SeedState> {
+async function pruneItemUnlocked(store: SeedStore, item: string, language: 'en' | 'ko' = 'en'): Promise<SeedState> {
   const currentSeed = await store.load();
   if (currentSeed.status === 'dormant') throw new Error('seed-dormant');
   const requestedItem = item.trim();
@@ -50,6 +51,7 @@ async function pruneItemUnlocked(store: SeedStore, seed: SeedState, item: string
     constraints: hasConstraint ? currentSeed.constraints : [...currentSeed.constraints, constraint], status: nextStatus(currentSeed.status, 'pruning'), updatedAt: now() };
   updated.maturity = Math.min(100, updated.maturity + (firstPrune ? 2 : 0)); await store.save(updated); await addEvent(store, updated, 'prune', `Pruned: ${requestedItem}`, { before, after, item: requestedItem, repeated: !firstPrune }); return updated;
 }
-export async function pruneItem(store: SeedStore, seed: SeedState, item: string, language: 'en' | 'ko' = 'en'): Promise<SeedState> {
-  return withKeyedLock(path.join(store.base, 'seed.json'), () => pruneItemUnlocked(store, seed, item, language));
+// Unused: the stored state is authoritative and is reloaded under the lock.
+export async function pruneItem(store: SeedStore, _seed: SeedState, item: string, language: 'en' | 'ko' = 'en'): Promise<SeedState> {
+  return withKeyedLock(path.join(store.base, 'seed.json'), () => pruneItemUnlocked(store, item, language));
 }

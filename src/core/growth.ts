@@ -35,14 +35,13 @@ export function isGrowthPauseRequest(value: string): boolean {
 /** Cancel the pending question and continue with a fresh one in the same focus. */
 async function changeGrowthQuestionUnlocked(
   store: SeedStore,
-  seed: SeedState,
   providerId?: string,
   branchId?: string,
   model?: string,
   language: ProviderLanguage = 'en',
   request = '',
 ): Promise<string> {
-  seed = await store.load();
+  const seed = await store.load();
   const requestedBranchId = branchId?.trim().toLocaleLowerCase();
   const currentBranch = requestedBranchId ? (await store.branches(seed.id)).find((branch) => branch.id.toLocaleLowerCase() === requestedBranchId) : undefined;
   if (requestedBranchId && !currentBranch) throw new Error('branch-selection-not-found');
@@ -72,26 +71,27 @@ async function changeGrowthQuestionUnlocked(
       metadata: { intent: 'change-question', skippedQuestion: pending.question },
     });
   }
-  return askGrowthQuestionUnlocked(store, await store.load(), providerId, branchId, model, language, true);
+  return askGrowthQuestionUnlocked(store, providerId, branchId, model, language, true);
 }
 
+// Unused: the stored state is authoritative and is reloaded under the lock.
 export async function changeGrowthQuestion(
   store: SeedStore,
-  seed: SeedState,
+  _seed: SeedState,
   providerId?: string,
   branchId?: string,
   model?: string,
   language: ProviderLanguage = 'en',
   request = '',
 ): Promise<string> {
-  return withKeyedLock(path.join(store.base, 'seed.json'), () => changeGrowthQuestionUnlocked(store, seed, providerId, branchId, model, language, request));
+  return withKeyedLock(path.join(store.base, 'seed.json'), () => changeGrowthQuestionUnlocked(store, providerId, branchId, model, language, request));
 }
 
-async function askGrowthQuestionUnlocked(store: SeedStore, seed: SeedState, providerId?: string, branchId?: string, model?: string, language: ProviderLanguage = 'en', preferSimpleQuestion = false): Promise<string> {
+async function askGrowthQuestionUnlocked(store: SeedStore, providerId?: string, branchId?: string, model?: string, language: ProviderLanguage = 'en', preferSimpleQuestion = false): Promise<string> {
   // Treat the persisted file as the source of truth. Callers often retain a
   // state snapshot from the previous turn while another command has already
   // appended a question or answer.
-  seed = await store.load();
+  const seed = await store.load();
   const [allConversations, relevantHistory, sunlightResearch] = await Promise.all([
     store.conversations(seed.id),
     store.events(seed.id),
@@ -129,7 +129,7 @@ async function askGrowthQuestionUnlocked(store: SeedStore, seed: SeedState, prov
           updatedAt: cancelledAt,
         });
       }
-      return askGrowthQuestionUnlocked(store, await store.load(), providerId, branchId, model, language, true);
+      return askGrowthQuestionUnlocked(store, providerId, branchId, model, language, true);
     }
     if (!allConversations.some((entry) => entry.role === 'assistant' && entry.type === 'question' && entry.branchId === branchId && entry.content === pending.question)) {
       await addConversation(store, { seedId: seed.id, ...(branchId ? { branchId } : {}), role: 'assistant', type: 'question', content: pending.question,
@@ -149,12 +149,13 @@ async function askGrowthQuestionUnlocked(store: SeedStore, seed: SeedState, prov
   }
   return suggestion.question;
 }
-export async function askGrowthQuestion(store: SeedStore, seed: SeedState, providerId?: string, branchId?: string, model?: string, language: ProviderLanguage = 'en', preferSimpleQuestion = false): Promise<string> {
-  return withKeyedLock(path.join(store.base, 'seed.json'), () => askGrowthQuestionUnlocked(store, seed, providerId, branchId, model, language, preferSimpleQuestion));
+// Unused: the stored state is authoritative and is reloaded under the lock.
+export async function askGrowthQuestion(store: SeedStore, _seed: SeedState, providerId?: string, branchId?: string, model?: string, language: ProviderLanguage = 'en', preferSimpleQuestion = false): Promise<string> {
+  return withKeyedLock(path.join(store.base, 'seed.json'), () => askGrowthQuestionUnlocked(store, providerId, branchId, model, language, preferSimpleQuestion));
 }
 
-async function applyGrowthUnlocked(store: SeedStore, seed: SeedState, answer: string, providerId?: string, branchId?: string, language: ProviderLanguage = 'en', model?: string): Promise<{ before: string; after: string; seed: SeedState; update: GrowthUpdate }> {
-  seed = await store.load();
+async function applyGrowthUnlocked(store: SeedStore, answer: string, providerId?: string, branchId?: string, language: ProviderLanguage = 'en', model?: string): Promise<{ before: string; after: string; seed: SeedState; update: GrowthUpdate }> {
+  const seed = await store.load();
   if (seed.status === 'dormant') throw new Error('seed-dormant');
   if (!answer.trim()) throw new Error('answer-required');
   const requestedBranchId = branchId?.trim().toLocaleLowerCase();
@@ -233,8 +234,9 @@ async function applyGrowthUnlocked(store: SeedStore, seed: SeedState, answer: st
   return { before, after: update.updatedSummary, seed: updated, update };
 }
 
-export async function applyGrowth(store: SeedStore, seed: SeedState, answer: string, providerId?: string, branchId?: string, language: ProviderLanguage = 'en', model?: string): Promise<{ before: string; after: string; seed: SeedState; update: GrowthUpdate }> {
-  return withKeyedLock(path.join(store.base, 'seed.json'), () => applyGrowthUnlocked(store, seed, answer, providerId, branchId, language, model));
+// Unused: the stored state is authoritative and is reloaded under the lock.
+export async function applyGrowth(store: SeedStore, _seed: SeedState, answer: string, providerId?: string, branchId?: string, language: ProviderLanguage = 'en', model?: string): Promise<{ before: string; after: string; seed: SeedState; update: GrowthUpdate }> {
+  return withKeyedLock(path.join(store.base, 'seed.json'), () => applyGrowthUnlocked(store, answer, providerId, branchId, language, model));
 }
 
 /** Growth is ready to pause once the essential story has been answered. */

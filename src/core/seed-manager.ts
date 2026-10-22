@@ -37,7 +37,7 @@ export async function addEvent(store: SeedStore, seed: SeedState, type: string, 
 }
 
 /** Persist an explicit user-confirmed decision; AI suggestions never call this. */
-async function recordDecisionUnlocked(store: SeedStore, seed: SeedState, decisionText: string, reason = 'Confirmed by the user', branchId?: string): Promise<{ seed: SeedState; decision: Decision }> {
+async function recordDecisionUnlocked(store: SeedStore, decisionText: string, reason = 'Confirmed by the user', branchId?: string): Promise<{ seed: SeedState; decision: Decision }> {
   const decision = decisionText.trim();
   if (!decision) throw new Error('decision-required');
   const current = await store.load();
@@ -65,6 +65,6 @@ async function recordDecisionUnlocked(store: SeedStore, seed: SeedState, decisio
   return { seed: updated, decision: value };
 }
 
-export async function recordDecision(store: SeedStore, seed: SeedState, decisionText: string, reason = 'Confirmed by the user', branchId?: string): Promise<{ seed: SeedState; decision: Decision }> {
-  return withKeyedLock(path.join(store.base, 'seed.json'), () => recordDecisionUnlocked(store, seed, decisionText, reason, branchId));
+export async function recordDecision(store: SeedStore, decisionText: string, reason = 'Confirmed by the user', branchId?: string): Promise<{ seed: SeedState; decision: Decision }> {
+  return withKeyedLock(path.join(store.base, 'seed.json'), () => recordDecisionUnlocked(store, decisionText, reason, branchId));
 }

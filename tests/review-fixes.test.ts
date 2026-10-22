@@ -60,7 +60,7 @@ describe('code review regressions', () => {
       const seed = await plant(store, 'Medication reminder');
       await store.save({ ...seed, goals: ['Take medication on time'] });
       const branch = await createBranch(store, seed, 'Discarded mobile direction', 'Mobile exploration');
-      await recordDecision(store, seed, 'Use Flutter', 'For the discarded direction', branch.id);
+      await recordDecision(store, 'Use Flutter', 'For the discarded direction', branch.id);
       await addConversation(store, { seedId: seed.id, branchId: branch.id, role: 'user', type: 'answer', content: 'DISCARDED_ANSWER' });
       await pruneItem(store, seed, branch.id);
       for (const lang of ['en', 'ko'] as const) {
@@ -83,7 +83,7 @@ describe('code review regressions', () => {
       try {
         const store = new SeedStore(root);
         const seed = await plant(store, 'A product');
-        const duringAnalysis = async () => { await recordDecision(store, seed, 'Keep this decision'); };
+        const duringAnalysis = async () => { await recordDecision(store, 'Keep this decision'); };
         if (command === 'sunlight') vi.spyOn(provider, 'sunlightAnalysis').mockImplementation(async () => {
           await duringAnalysis(); return { areas: [], assumptions: [], openQuestions: [] };
         });

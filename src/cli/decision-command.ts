@@ -13,12 +13,12 @@ export function registerDecisionCommand(program: Command, deps: {
   currentSeed: (store: SeedStore) => Promise<SeedState>;
   print: (value: unknown, json?: boolean) => void;
 }): void {
-  const { addCommon, run, targetStore, currentSeed, print } = deps;
+  const { addCommon, run, targetStore, print } = deps;
   const decide = addCommon(program.command('decide').description(t('help.decide'))).argument('[decision]', t('cli.decisionArgument')).option('--reason <text>', t('cli.reasonOption'));
   decide.action(async (decisionText: string | undefined, options: CommonOptions & { reason?: string }) => run(async () => {
     if (!decisionText && process.stdin.isTTY && options.input !== false && !options.json) decisionText = (await input({ message: t('decision.prompt') })).trim();
     if (!decisionText) throw new Error('decision-required');
-    const store = await targetStore(options.seed); const result = await recordDecision(store, await currentSeed(store), decisionText, options.reason, options.branch);
+    const store = await targetStore(options.seed); const result = await recordDecision(store, decisionText, options.reason, options.branch);
     if (options.json) print(result, true); else console.log(t('decision.saved', { decision: result.decision.decision, maturity: result.seed.maturity }));
   }, options));
 }
