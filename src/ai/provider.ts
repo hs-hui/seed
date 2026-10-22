@@ -225,7 +225,7 @@ export async function waterPerspectives(seed: SeedState, providerId?: string, mo
   const response = await provider.ask(waterPerspectivesPrompt(seed));
   const parsed = parseJsonObject(response);
   const values = Array.isArray(parsed?.perspectives) ? parsed.perspectives.filter((item): item is { id?: unknown; name?: unknown; question?: unknown } => Boolean(item && typeof item === 'object')) : [];
-  const perspectives = values.filter((item) => typeof item.name === 'string' && typeof item.question === 'string').map((item, index) => ({ id: typeof item.id === 'string' && item.id ? item.id : `lens-${index + 1}`, name: item.name as string, question: sanitizeQuestion(item.question as string) })).filter((item) => item.question && !containsBeginnerJargon(`${item.name} ${item.question}`, contentLanguage, userAuthoredText(seed)) &&!isTooComplexQuestion(item.question, contentLanguage)).slice(0, 8);
+  const perspectives = values.filter((item) => typeof item.name === 'string' && typeof item.question === 'string').map((item, index) => ({ id: typeof item.id === 'string' && item.id ? item.id : `lens-${index + 1}`, name: item.name as string, question: sanitizeQuestion(item.question as string) })).filter((item) => item.question && !containsBeginnerJargon(`${item.name} ${item.question}`, contentLanguage, userAuthoredText(seed)) && !isTooComplexQuestion(item.question, contentLanguage)).slice(0, 8);
   if (perspectives.length < 4) throw new Error('ai-response-invalid');
   return perspectives;
 }
