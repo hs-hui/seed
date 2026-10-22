@@ -1,15 +1,27 @@
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ensureOpenAIAuthFile, getOpenAIToken, loginOpenAI } from '../src/ai/openai-oauth.js';
+import { addCodexOriginator, ensureOpenAIAuthFile, getOpenAIToken, loadOpenAITokens, loginOpenAI } from '../src/ai/openai-oauth.js';
 
 const prompts = vi.hoisted(() => ({ confirm: vi.fn(async () => false) }));
 const login = vi.hoisted(() => ({ run: vi.fn(async (): Promise<never> => { throw new Error('browser-login-stub'); }) }));
+const local = vi.hoisted(() => ({ failure: undefined as Error | undefined }));
 
 vi.mock('@inquirer/prompts', () => ({ confirm: prompts.confirm }));
 vi.mock('openai-oauth', () => ({ runOpenAIOAuthLogin: login.run }));
+vi.mock('@openai-oauth/local', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@openai-oauth/local')>();
+  return {
+    ...actual,
+    openaiCredentials: (options: Parameters<typeof actual.openaiCredentials>[0]) => local.failure
+      ? { getSession: async () => { throw local.failure; } }
+      : actual.openaiCredentials(options),
+  };
+});
 
+const readme = (name: string) => readFile(fileURLToPath(new URL(`../${name}`, import.meta.url)), 'utf8');
 const exists = async (filePath: string) => { try { await stat(filePath); return true; } catch { return false; } };
 
 const codexAuth = {
@@ -26,6 +38,7 @@ describe('OpenAI account credentials', () => {
   const ttyDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
 
   const setTTY = (value: boolean) => Object.defineProperty(process.stdin, 'isTTY', { value, configurable: true });
+  const writeSeedFile = async (content: string) => { await mkdir(path.dirname(seedFile), { recursive: true }); await writeFile(seedFile, content); };
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(os.tmpdir(), 'seed-openai-oauth-'));
@@ -40,6 +53,7 @@ describe('OpenAI account credentials', () => {
     prompts.confirm.mockReset();
     prompts.confirm.mockResolvedValue(false);
     login.run.mockClear();
+    local.failure = undefined;
     setTTY(false);
   });
 
@@ -87,6 +101,36 @@ describe('OpenAI account credentials', () => {
       await expect(loginOpenAI('en')).rejects.toThrow('browser-login-stub');
       expect(prompts.confirm).not.toHaveBeenCalled();
       expect(await exists(seedFile)).toBe(false);
+    });
+  });
+
+  describe('read failures are not reported as a missing login (#19)', () => {
+    it('returns no credential when Seed has no auth file', async () => {
+      expect(await getOpenAIToken()).toBeUndefined();
+      expect(await loadOpenAITokens()).toBeNull();
+    });
+
+    it('throws a read error for an unreadable auth file without echoing its contents', async () => {
+      await writeSeedFile('{"tokens": {"access_token": "SECRET-TOKEN-VALUE"');
+      const error = await getOpenAIToken().catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toMatch(/^openai-oauth-read-failed: /);
+      expect((error as Error).message).not.toContain('SECRET-TOKEN-VALUE');
+      await expect(loadOpenAITokens()).rejects.toThrow(/^openai-oauth-read-failed: /);
+    });
+
+    it('throws when a token refresh fails instead of returning undefined', async () => {
+      await writeSeedFile(JSON.stringify(codexAuth));
+      local.failure = new Error('refresh rejected for codex-refresh-token');
+      const error = await getOpenAIToken().catch((caught: unknown) => caught);
+      expect((error as Error).message).toMatch(/^openai-oauth-read-failed: /);
+      expect((error as Error).message).not.toContain('codex-refresh-token');
+    });
+  });
+
+  describe('login originator (#18)', () => {
+    it('keeps the Codex originator marker that the login flow depends on', () => {
+      expect(addCodexOriginator('https://auth.openai.com/oauth/authorize?client_id=test')).toContain('originator=codex_cli_rs');
     });
   });
 });

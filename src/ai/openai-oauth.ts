@@ -111,26 +111,34 @@ function openLoginUrl(message: string, language: OAuthLanguage, write: OAuthWrit
   return true;
 }
 
+/** Keep only a short code: JSON and HTTP error text can echo token material. */
+function readFailureReason(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  const name = error instanceof Error && error.cause instanceof SyntaxError ? 'invalid-json' : error instanceof Error ? error.name : 'unknown';
+  return String(typeof code === 'string' ? code : name).replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 40) || 'unknown';
+}
+
+/** A missing file means "not signed in"; any failure after that is a real error, not a missing login. */
+async function readOpenAISession(ensureFresh: boolean) {
+  const authFilePath = openAIAuthFilePath();
+  if (!(await fileExists(authFilePath))) return null;
+  try {
+    const credentials = openaiCredentials({ authFilePath, ensureFresh });
+    return (await credentials.getSession()) ?? null;
+  } catch (error) {
+    throw new Error(`openai-oauth-read-failed: ${readFailureReason(error)}`);
+  }
+}
+
 /** Read the local Codex auth file without forcing a refresh. */
 export async function loadOpenAITokens(): Promise<OpenAITokens | null> {
-  try {
-    const credentials = openaiCredentials({ authFilePath: openAIAuthFilePath(), ensureFresh: false });
-    const session = await credentials.getSession();
-    return session ? normalize(session) : null;
-  } catch {
-    return null;
-  }
+  const session = await readOpenAISession(false);
+  return session ? normalize(session) : null;
 }
 
 /** Read local Codex credentials and refresh them when the package requires it. */
 export async function getOpenAIToken(): Promise<string | undefined> {
-  try {
-    const credentials = openaiCredentials({ authFilePath: openAIAuthFilePath(), ensureFresh: true });
-    const session = await credentials.getSession();
-    return session?.accessToken;
-  } catch {
-    return undefined;
-  }
+  return (await readOpenAISession(true))?.accessToken;
 }
 
 /** Run the package's loopback browser OAuth flow and save Seed's auth file. */
