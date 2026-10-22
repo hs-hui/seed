@@ -23,6 +23,14 @@ export async function addConversation(store: SeedStore, entry: Omit<Conversation
   const value: ConversationEntry = { ...entry, id: randomUUID(), createdAt: now() };
   await store.appendConversation(value); return value;
 }
+/**
+ * Harvest is the user's completed step and the harvested documents are the
+ * record, so growth-state commands must not reopen it. Dormancy is changed
+ * only by wake. Every status write in the growth path goes through here.
+ */
+export function nextStatus(current: SeedState['status'], computed: SeedState['status']): SeedState['status'] {
+  return current === 'dormant' || current === 'harvested' ? current : computed;
+}
 export async function addEvent(store: SeedStore, seed: SeedState, type: string, message: string, metadata?: Record<string, unknown>): Promise<void> {
   const event: GrowthEvent = { id: randomUUID(), seedId: seed.id, type, message, createdAt: now(), ...(metadata ? { metadata } : {}) };
   await store.appendEvent(event);
@@ -51,7 +59,7 @@ async function recordDecisionUnlocked(store: SeedStore, seed: SeedState, decisio
   }
   const updated: SeedState = { ...current, decisions: [...current.decisions, value], updatedAt: now() };
   updated.maturity = Math.max(current.maturity, calculateMaturity(updated));
-  if (updated.status !== 'dormant' && updated.status !== 'harvested') updated.status = statusForMaturity(updated.maturity);
+  updated.status = nextStatus(current.status, statusForMaturity(updated.maturity));
   await store.save(updated); await store.saveDecision(value);
   await addEvent(store, updated, 'decision', `Decision confirmed: ${decision}`, { decisionId: value.id });
   return { seed: updated, decision: value };

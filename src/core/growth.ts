@@ -1,7 +1,7 @@
 import { SeedState, now, OpenQuestion } from '../domain.js';
 import { randomUUID } from 'node:crypto';
 import { SeedStore } from '../storage/store.js';
-import { addConversation, addEvent } from './seed-manager.js';
+import { addConversation, addEvent, nextStatus } from './seed-manager.js';
 import { coreAI } from './ai.js';
 import type { GrowthUpdate, ProviderLanguage } from '../ai/contracts.js';
 import type { ContextExtras } from '../ai/context-builder.js';
@@ -208,7 +208,7 @@ async function applyGrowthUnlocked(store: SeedStore, seed: SeedState, answer: st
     // low score must not make a useful answer look like it made no progress.
     // Bloom can still lower the score later when it performs a full review.
     updated.maturity = Math.min(100, Math.max(seed.maturity + 1, calculateMaturity(updated)));
-    updated.status = statusForMaturity(updated.maturity);
+    updated.status = nextStatus(seed.status, statusForMaturity(updated.maturity));
   }
   await store.save(updated); await addConversation(store, { seedId: seed.id, ...(branchId ? { branchId } : {}), role: 'assistant', type: 'summary', content: update.updatedSummary,
     metadata: { maturityDelta: update.maturityDelta, questionReason: update.questionReason } });

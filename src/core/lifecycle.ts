@@ -1,6 +1,6 @@
 import { SeedState, now } from '../domain.js';
 import { SeedStore } from '../storage/store.js';
-import { addEvent } from './seed-manager.js';
+import { addEvent, nextStatus } from './seed-manager.js';
 import { statusForMaturity } from './maturity.js';
 import path from 'node:path';
 import { withKeyedLock } from '../utils/fs.js';
@@ -9,8 +9,7 @@ function statusAfterRestore(seed: SeedState): SeedState['status'] {
   // Restoring a pruned item must not silently roll a previously harvested
   // seed back into a growth phase. Dormant state is likewise preserved until
   // the explicit wake command.
-  if (seed.status === 'dormant' || seed.status === 'harvested') return seed.status;
-  return statusForMaturity(seed.maturity);
+  return nextStatus(seed.status, statusForMaturity(seed.maturity));
 }
 
 function removePruneNotes(coreIdea: string, labels: string[]): string {

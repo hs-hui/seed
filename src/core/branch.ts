@@ -1,7 +1,7 @@
 import { Branch, SeedState, now, slugify } from '../domain.js';
 import { randomUUID } from 'node:crypto';
 import { SeedStore } from '../storage/store.js';
-import { addEvent } from './seed-manager.js';
+import { addEvent, nextStatus } from './seed-manager.js';
 import { coreAI } from './ai.js';
 import type { ProviderLanguage } from '../ai/contracts.js';
 import path from 'node:path';
@@ -16,7 +16,7 @@ async function createBranchUnlocked(store: SeedStore, seed: SeedState, name: str
   if (active.length >= 5) throw new Error('too-many-branches');
   const branch: Branch = { id: randomUUID(), seedId: currentSeed.id, name, slug: `${slugify(name)}-${Date.now()}`,
     summary, direction: name, status: 'active', maturity: currentSeed.maturity, assumptions: [], decisions: [], openQuestions: [], createdAt: now(), updatedAt: now() };
-  await store.saveBranch(branch); const updated = { ...currentSeed, branches: [...currentSeed.branches, branch.id], activeBranch: branch.id, status: 'branching' as const, updatedAt: now() };
+  await store.saveBranch(branch); const updated = { ...currentSeed, branches: [...currentSeed.branches, branch.id], activeBranch: branch.id, status: nextStatus(currentSeed.status, 'branching'), updatedAt: now() };
   await store.save(updated); await addEvent(store, updated, 'branch', `Branch created: ${name}`, { branchId: branch.id }); return branch;
 }
 export async function createBranch(store: SeedStore, seed: SeedState, name: string, summary: string, providerId?: string): Promise<Branch> {
@@ -47,7 +47,7 @@ async function pruneItemUnlocked(store: SeedStore, seed: SeedState, item: string
       ? branches.find((branch) => branch.id !== target.id && branch.status === 'active')?.id
       : currentSeed.activeBranch,
     coreIdea: after,
-    constraints: hasConstraint ? currentSeed.constraints : [...currentSeed.constraints, constraint], status: 'pruning', updatedAt: now() };
+    constraints: hasConstraint ? currentSeed.constraints : [...currentSeed.constraints, constraint], status: nextStatus(currentSeed.status, 'pruning'), updatedAt: now() };
   updated.maturity = Math.min(100, updated.maturity + (firstPrune ? 2 : 0)); await store.save(updated); await addEvent(store, updated, 'prune', `Pruned: ${requestedItem}`, { before, after, item: requestedItem, repeated: !firstPrune }); return updated;
 }
 export async function pruneItem(store: SeedStore, seed: SeedState, item: string, language: 'en' | 'ko' = 'en'): Promise<SeedState> {
