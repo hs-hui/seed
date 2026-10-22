@@ -35,7 +35,7 @@ npm install -g @seed-cli/seed
 npx @seed-cli/seed "친구한테 답장하는 걸 까먹지 않게 도와주는 앱"
 ```
 
-[Node.js](https://nodejs.org) 20 이상이 필요합니다.
+[Node.js](https://nodejs.org) 20.10 이상이 필요합니다.
 
 ## 시작하기
 

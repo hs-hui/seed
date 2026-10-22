@@ -35,7 +35,7 @@ Or try it once without installing:
 npx @seed-cli/seed "An app that helps me remember to text my friends back"
 ```
 
-Requires [Node.js](https://nodejs.org) 20 or newer.
+Requires [Node.js](https://nodejs.org) 20.10 or newer.
 
 ## Getting started
 
