@@ -29,15 +29,28 @@ export function sanitizeQuestion(value: string): string {
   return sentence.slice(0, 180).trim();
 }
 
-export function containsBeginnerJargon(value: string, language: ProviderLanguage): boolean {
-  const korean = /가정|전제|검증|스코프|시그널|신호|실현\s*가능성|현실성|타당성|차별화|차별성|차별점|경쟁력|경쟁\s*우위|경쟁사|성숙도|리스크|시장\s*(?:규모|조사|성)|수익\s*(?:모델|성)|확장성|우선순위|핵심\s*가설|가치\s*제안|문제\s*정의|실행\s*가능|제약|기술\s*(?:스택|적(?:으로)?\s*가능)|유저\s*플로우|백엔드|프론트엔드|데이터베이스|배포|프로토타입|요구사항|엔드포인트|스키마/i;
+/**
+ * A jargon-looking term the user typed is their own vocabulary, not planning
+ * language leaked by the model. Korean is matched as a substring because it
+ * attaches particles and compounds (신호 in 신호등); Latin text needs whole
+ * words so "ui" does not hide inside "guide".
+ */
+function isUserWord(term: string, userText: string): boolean {
+  if (/[가-힣]/.test(term)) return userText.replace(/\s+/g, '').toLocaleLowerCase().includes(term.replace(/\s+/g, '').toLocaleLowerCase());
+  const words = (text: string): string => ` ${text.toLocaleLowerCase().split(/[^a-z0-9]+/).filter(Boolean).join(' ')} `;
+  return words(userText).includes(words(term));
+}
+
+export function containsBeginnerJargon(value: string, language: ProviderLanguage, userText = ''): boolean {
+  const korean = /(?:가정(?:을|이)\s*세|검증할\s*가정|핵심\s*가정)|전제|검증|스코프|시그널|신호|실현\s*가능성|현실성|타당성|차별화|차별성|차별점|경쟁력|경쟁\s*우위|경쟁사|성숙도|리스크|시장\s*(?:규모|조사|성)|수익\s*(?:모델|성)|확장성|우선순위|핵심\s*가설|가치\s*제안|문제\s*정의|실행\s*가능|제약|기술\s*(?:스택|적(?:으로)?\s*가능)|유저\s*플로우|백엔드|프론트엔드|데이터베이스|배포|프로토타입|요구사항|엔드포인트|스키마/i;
   const english = /\b(?:assumption|premise|validat(?:e|ed|ing|ion)|scope|signal|feasibility|viability|differentiation|differentiator|competitive(?:ness|\s+advantage)?|competitor|maturity|risk|market\s+(?:size|research|fit)|revenue\s+model|profitability|scalability|priority|core\s+hypothesis|value\s+proposition|product[- ]market\s+fit|mvp|persona|customer\s+profile|retention|conversion|roadmap|tech(?:nical)?\s+stack|technology|technical(?:ly)?|constraints|user\s+flow|target\s+(?:audience|user)|user\s+segment|customer\s+segment|api|cli|sdk|ui|ux|backend|frontend|database|db|endpoint|token|schema|deploy(?:ment)?|prototype|kpi|integration|requirement(?:s)?)\b/i;
   // Models occasionally answer in the wrong language. Check both vocabularies
   // so a Korean session does not receive an English jargon leak (or vice
   // versa), while keeping the selected language as the primary contract.
   const primary = language === 'ko' ? korean : english;
   const secondary = language === 'ko' ? english : korean;
-  return primary.test(value) || secondary.test(value);
+  const leaks = (pattern: RegExp): boolean => [...value.matchAll(new RegExp(pattern.source, `${pattern.flags}g`))].some((match) => !isUserWord(match[0], userText));
+  return leaks(primary) || leaks(secondary);
 }
 
 /** Keep one-question turns short enough for someone new to software. */
@@ -161,11 +174,11 @@ export function isBeginnerFriendlyQuestion(value: string, language: ProviderLang
  * terminal. Empty guidance is fine; the user should never have to decode a
  * planning phrase just because a provider returned one.
  */
-export function isBeginnerFriendlyFeedback(value: string, language: ProviderLanguage): boolean {
+export function isBeginnerFriendlyFeedback(value: string, language: ProviderLanguage, userText = ''): boolean {
   const normalized = value.replace(/\s+/g, ' ').trim();
   return Boolean(normalized)
     && normalized.length <= (language === 'ko' ? 120 : 180)
-    && !containsBeginnerJargon(normalized, language)
+    && !containsBeginnerJargon(normalized, language, userText)
     && !isTooComplexQuestion(normalized, language);
 }
 
