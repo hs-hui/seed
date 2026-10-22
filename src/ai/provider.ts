@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { Branch, ConversationEntry, GrowthFocus, ResearchEntry, SeedState, growthFocuses } from '../domain.js';
 export { dimensionsFor } from '../domain/maturity-dimensions.js';
 import { buildContext } from './context-builder.js';
@@ -266,12 +267,24 @@ export async function evolutionSuggestions(seed: SeedState, providerId?: string,
   return suggestions;
 }
 
+// The top-level reply shape is strict (a wrong `branches`/`items` type is an
+// invalid provider reply), but a single malformed entry is dropped so one bad
+// item does not discard the valid suggestions around it.
+const branchReply = z.object({ branches: z.array(z.unknown()) });
+const branchItem = z.object({ name: z.string(), summary: z.string() });
+const pruneReply = z.object({ items: z.array(z.unknown()) });
+const pruneItem = z.object({ item: z.string(), reason: z.string() });
+function validItems<T extends z.ZodTypeAny>(items: unknown[], schema: T): Array<z.infer<T>> {
+  return items.flatMap((item) => { const result = schema.safeParse(item); return result.success ? [result.data] : []; });
+}
+
 export async function suggestBranches(seed: SeedState, providerId?: string, model?: string, language: ProviderLanguage = 'en'): Promise<Array<{ name: string; summary: string }>> {
   const contentLanguage = inferProviderLanguage(language, [seed.originalIdea, seed.coreIdea, seed.problem, ...seed.users, ...seed.goals]);
   const provider = await getProvider(providerId, model, contentLanguage);
   const response = await provider.ask(branchPrompt(seed));
-  const parsed = parseJsonObject(response) as { branches?: Array<{ name: string; summary: string }> } | undefined;
-  const branches = (parsed?.branches ?? []).filter((branch) => branch?.name && branch?.summary && !containsBeginnerJargon(`${branch.name} ${branch.summary}`, contentLanguage)).slice(0, 4);
+  const reply = branchReply.safeParse(parseJsonObject(response));
+  if (!reply.success) throw new Error('ai-response-invalid');
+  const branches = validItems(reply.data.branches, branchItem).filter((branch) => branch.name && branch.summary && !containsBeginnerJargon(`${branch.name} ${branch.summary}`, contentLanguage)).slice(0, 4);
   if (branches.length < 2) throw new Error('ai-response-invalid');
   return branches;
 }
@@ -280,8 +293,9 @@ export async function suggestPrune(seed: SeedState, providerId?: string, model?:
   const contentLanguage = inferProviderLanguage(language, [seed.originalIdea, seed.coreIdea, seed.problem, ...seed.users, ...seed.goals]);
   const provider = await getProvider(providerId, model, contentLanguage);
   const response = await provider.ask(prunePrompt(seed));
-  const parsed = parseJsonObject(response) as { items?: Array<{ item: string; reason: string }> } | undefined;
-  const items = (parsed?.items ?? []).filter((item) => item?.item && item?.reason && !containsBeginnerJargon(`${item.item} ${item.reason}`, contentLanguage));
+  const reply = pruneReply.safeParse(parseJsonObject(response));
+  if (!reply.success) throw new Error('ai-response-invalid');
+  const items = validItems(reply.data.items, pruneItem).filter((item) => item.item && item.reason && !containsBeginnerJargon(`${item.item} ${item.reason}`, contentLanguage));
   return items;
 }
 
