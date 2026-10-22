@@ -5,6 +5,9 @@ import path from 'node:path';
 import { loadConfig, migrateLegacyOAuthModel } from '../src/storage/store.js';
 import { OpenAICompatibleProvider, OpenAIOAuthProvider, providerTimeoutSignal } from '../src/ai/transport.js';
 import { generateText } from 'ai';
+import { createSeed, type HarvestType } from '../src/domain.js';
+import { generateHarvestDocument, documentSections, type HarvestInput } from '../src/ai/harvest-document.js';
+import type { ProviderMessage } from '../src/ai/contracts.js';
 
 vi.mock('ai', async (importOriginal) => ({ ...(await importOriginal<typeof import('ai')>()), generateText: vi.fn() }));
 
@@ -74,5 +77,52 @@ describe('OAuth provider timeout cancels the request (#35)', () => {
     const provider = new OpenAIOAuthProvider({ id: 'openai', name: 'openai', type: 'openai', connectionMode: 'oauth', defaultModel: 'gpt-test', enabled: true });
     await expect(provider.ask('Hello')).rejects.toThrow('openai request timed out after 20ms.');
     expect(vi.mocked(generateText).mock.calls[0]![0].abortSignal?.aborted).toBe(true);
+  });
+});
+
+describe('harvest quote matching and retry (#36)', () => {
+  const seed = createSeed('Users enter a task name and save the task to a list.');
+  // Source uses curly quotes, a non-breaking space and repeated spaces; the model quotes it with straight quotes.
+  const sourceText = 'Users enter “a task name” and save the task   to a list.';
+  const input: HarvestInput = { evidence: [{ id: 'idea', text: sourceText }], excluded: [] };
+  const type: HarvestType = 'prd';
+  function draft(quote: string) {
+    return { claims: [{ id: 'c1', section: 'flow', text: 'The user enters a task name and saves it.', evidence: [{ sourceId: 'idea', quote }] }],
+      missing: documentSections[type].filter((entry) => entry.id !== 'flow').map((entry) => entry.id) };
+  }
+  function fakeProvider(document: (call: number) => string) {
+    let documentCalls = 0;
+    return { id: 'test', model: 'test-model', ask: vi.fn(), stream: vi.fn(), testConnection: vi.fn(), listModels: vi.fn(),
+      chat: vi.fn(async (messages: ProviderMessage[]) => messages.at(-1)!.content.startsWith('HARVEST_DOCUMENT')
+        ? document(documentCalls++) : JSON.stringify({ verdicts: [{ id: 'c1', supported: true }] })) };
+  }
+  const documentCalls = (fake: ReturnType<typeof fakeProvider>) => fake.chat.mock.calls.filter(([messages]) => messages.at(-1)!.content.startsWith('HARVEST_DOCUMENT')).length;
+
+  it('accepts a quote that differs from the source only by whitespace and curly quotes', async () => {
+    const fake = fakeProvider(() => JSON.stringify(draft('Users enter "a task name" and save the task to a list.')));
+    await expect(generateHarvestDocument(seed, type, 'en', input, { provider: fake })).resolves.toContain('Source evidence');
+  });
+
+  it('accepts a decomposed (NFD) quote against a composed source', async () => {
+    const composed = { evidence: [{ id: 'idea', text: 'Café users enter a task name.' }], excluded: [] };
+    const fake = fakeProvider(() => JSON.stringify(draft('Café users enter a task name.')));
+    await expect(generateHarvestDocument(seed, type, 'en', composed, { provider: fake })).resolves.toContain('Source evidence');
+  });
+
+  it('still rejects a quote whose words are not in the source', async () => {
+    const fake = fakeProvider(() => JSON.stringify(draft('Users pay with Stripe')));
+    await expect(generateHarvestDocument(seed, type, 'en', input, { provider: fake })).rejects.toThrow('harvest-unsupported-content');
+  });
+
+  it('retries the generation once when the first reply is invalid', async () => {
+    const fake = fakeProvider((call) => (call === 0 ? 'not JSON' : JSON.stringify(draft('Users enter "a task name" and save the task to a list.'))));
+    await expect(generateHarvestDocument(seed, type, 'en', input, { provider: fake })).resolves.toContain('Source evidence');
+    expect(documentCalls(fake)).toBe(2);
+  });
+
+  it('fails after a single retry when the reply stays invalid', async () => {
+    const fake = fakeProvider(() => 'not JSON');
+    await expect(generateHarvestDocument(seed, type, 'en', input, { provider: fake })).rejects.toThrow('ai-response-invalid');
+    expect(documentCalls(fake)).toBe(2);
   });
 });

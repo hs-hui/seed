@@ -61,7 +61,8 @@ describe('AI document grounding', () => {
     if (failure === 'missing-section') doc.missing.pop();
     const provider = installProvider(async () => JSON.stringify(doc));
     await expect(generateHarvestDocument(seed, 'prd', 'en', input)).rejects.toThrow('harvest-unsupported-content');
-    expect(provider.chat).toHaveBeenCalledTimes(1);
+    // One retry of generation, and still no semantic review call for an invalid draft.
+    expect(provider.chat).toHaveBeenCalledTimes(2);
   });
 
   it('rejects an invented feature even when it cites a real quote', async () => {
@@ -147,7 +148,8 @@ describe('AI harvest persistence', () => {
 
   it('writes no documents, results or harvest status if a later batch review rejects content', async () => {
     const { root, store, state } = await project(); let calls = 0;
-    installProvider(async (messages) => ++calls === 4 ? JSON.stringify({ verdicts: [{ id: 'c1', supported: false }] }) : respond(messages));
+    // Batch two's review (call 4) and its single generation retry's review (call 6) both reject.
+    installProvider(async (messages) => [4, 6].includes(++calls) ? JSON.stringify({ verdicts: [{ id: 'c1', supported: false }] }) : respond(messages));
     try {
       await expect(harvest(store, state, 'all', 'en', { ai: true, draft: true })).rejects.toThrow('harvest-unsupported-content');
       expect((await readdir(path.join(store.base, 'harvest'))).filter((name) => name.endsWith('.md'))).toEqual([]);

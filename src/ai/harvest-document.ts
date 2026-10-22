@@ -59,6 +59,11 @@ const documentSchema = z.object({ claims: z.array(claimSchema).min(1).max(100), 
 const reviewSchema = z.object({ verdicts: z.array(z.object({ id: z.string(), supported: z.boolean() }).strict()).max(100) }).strict();
 type GeneratedDocument = z.infer<typeof documentSchema>;
 
+/** Quotes are checked after whitespace, typographic quote and Unicode composition differences are removed. */
+function comparable(value: string): string {
+  return value.normalize('NFC').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim();
+}
+
 function validateDocument(response: string, input: HarvestInput, type: HarvestType): GeneratedDocument {
   const parsed = documentSchema.safeParse(parseJsonObject(response));
   if (!parsed.success) throw new Error('ai-response-invalid');
@@ -69,7 +74,8 @@ function validateDocument(response: string, input: HarvestInput, type: HarvestTy
   for (const claim of doc.claims) {
     if (!sections.has(claim.section) || doc.missing.includes(claim.section)) throw new Error('harvest-unsupported-content');
     for (const citation of claim.evidence) {
-      if (!source.get(citation.sourceId)?.includes(citation.quote)) throw new Error('harvest-unsupported-content');
+      const text = source.get(citation.sourceId);
+      if (text === undefined || !comparable(text).includes(comparable(citation.quote))) throw new Error('harvest-unsupported-content');
     }
   }
   if (doc.missing.some((id) => !sections.has(id)) || [...sections].some((id) => !doc.missing.includes(id) && !doc.claims.some((claim) => claim.section === id))) throw new Error('harvest-unsupported-content');
@@ -85,8 +91,19 @@ If evidence is insufficient or conflicting, mark the whole affected section miss
 // create headings, links and evidence labels.
 function plain(value: string): string { return value.replace(/\s+/g, ' ').replace(/[\\`*_{}\[\]()<>#!|~]/g, '\\$&'); }
 
+const retryableReplies = new Set(['ai-response-invalid', 'harvest-unsupported-content']);
+/** A single malformed or unsupported reply is common enough that generation gets one more attempt before failing closed. */
 export async function generateHarvestDocument(seed: SeedState, type: HarvestType, language: ProviderLanguage, input: HarvestInput,
   options: { providerId?: string; model?: string; provider?: LLMProvider } = {}): Promise<string> {
+  try { return await renderHarvestDocument(seed, type, language, input, options); }
+  catch (error) {
+    if (!(error instanceof Error) || !retryableReplies.has(error.message)) throw error;
+    return renderHarvestDocument(seed, type, language, input, options);
+  }
+}
+
+async function renderHarvestDocument(seed: SeedState, type: HarvestType, language: ProviderLanguage, input: HarvestInput,
+  options: { providerId?: string; model?: string; provider?: LLMProvider }): Promise<string> {
   if (!input.evidence.length) throw new Error('harvest-evidence-required');
   // Never silently drop older answers: they may contain scope restrictions.
   if (JSON.stringify(input).length > 120_000) throw new Error('harvest-evidence-too-large');
