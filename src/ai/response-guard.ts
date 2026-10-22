@@ -95,7 +95,7 @@ export function safeQuestionCandidates(language: ProviderLanguage, focus: Growth
       goal: [
         '써본 뒤 무엇이 달라지면 좋을까요?',
         '이걸 써서 가장 먼저 얻고 싶은 것은 무엇인가요?',
-        '처음 성공했다고 느낌 순간은 언제예요?',
+        '처음 성공했다고 느낀 순간은 언제예요?',
         '한 번 써본 뒤 무엇을 할 수 있으면 좋을까요?',
       ],
       constraint: [
@@ -107,7 +107,7 @@ export function safeQuestionCandidates(language: ProviderLanguage, focus: Growth
       assumption: [
         '처음 누구에게 보여보고 어떤 반응을 볼까요?',
         '누구에게 먼저 보여주면 좋을까요?',
-        '처음 보여줌을 때 어떤 반응이면 좋을까요?',
+        '처음 보여줬을 때 어떤 반응이면 좋을까요?',
         '누가 써보면 이 생각이 괜찮은지 알 수 있을까요?',
       ],
       validation: [
