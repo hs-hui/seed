@@ -3,6 +3,7 @@ import { t, currentLanguage, setLanguage } from '../i18n/index.js';
 import { loadConfig } from '../storage/store.js';
 import { DEFAULT_OPENAI_MODEL, DEFAULT_OPENAI_OAUTH_MODEL, getProvider, providerKey, testProviderConnection } from '../ai/provider.js';
 import { loginOpenAI } from '../ai/openai-oauth.js';
+import { PROVIDER_DEFAULT_MODELS } from '../ai/defaults.js';
 import { configWizard, configuredCredential, missingCredentialMessage, persistConfig } from './config-setup.js';
 
 export type CommonOptions = { lang?: string; json?: boolean; provider?: string; model?: string; seed?: string; branch?: string; setup?: boolean; web?: boolean; input?: boolean; since?: string };
@@ -39,7 +40,7 @@ export function registerConfigCommands(program: Command, deps: ConfigCommandDeps
     if (key === 'lang') { if (valueArg !== 'ko' && valueArg !== 'en') throw new Error('invalid-language'); value.lang = valueArg; setLanguage(valueArg); await persistConfig(value); print(jsonRequested(options) ? value : t('config.saved'), jsonRequested(options)); return; }
     if (key === 'provider') {
       if (!value.providers.some((p) => p.id === valueArg)) {
-        const known = valueArg === 'openai' ? { type: 'openai' as const, model: DEFAULT_OPENAI_MODEL } : valueArg === 'gemini' ? { type: 'gemini' as const, model: 'gemini-2.5-flash' } : valueArg === 'anthropic' ? { type: 'anthropic' as const, model: 'claude-3-5-sonnet-latest' } : { type: 'custom' as const, model: 'default' };
+        const known = valueArg === 'openai' ? { type: 'openai' as const, model: DEFAULT_OPENAI_MODEL } : valueArg === 'gemini' ? { type: 'gemini' as const, model: PROVIDER_DEFAULT_MODELS.gemini } : valueArg === 'anthropic' ? { type: 'anthropic' as const, model: PROVIDER_DEFAULT_MODELS.anthropic } :{ type: 'custom' as const, model: 'default' };
         value.providers.push({ id: valueArg, name: valueArg, type: known.type, defaultModel: known.model, enabled: true, ...(known.type === 'openai' ? { connectionMode: 'api-key' as const } : {}) });
       }
       const configured = value.providers.find((provider) => provider.id === valueArg);

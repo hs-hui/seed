@@ -3,6 +3,7 @@ import { currentLanguage, t } from '../i18n/index.js';
 import { loadConfig, loadGlobalConfig, projectConfigPath, saveConfig, saveProjectConfig, type GlobalConfig, type ProviderConfig } from '../storage/store.js';
 import { DEFAULT_OPENAI_MODEL, DEFAULT_OPENAI_OAUTH_MODEL, providerKey, testProviderConnection } from '../ai/provider.js';
 import { getOpenAIToken, loginOpenAI } from '../ai/openai-oauth.js';
+import { PROVIDER_DEFAULT_MODELS } from '../ai/defaults.js';
 
 export function credentialEnvName(provider: ProviderConfig): string {
   if (provider.type === 'openai') return 'OPENAI_API_KEY';
@@ -71,7 +72,7 @@ export async function configWizard(): Promise<void> {
   const id = selected === 'custom' ? (await input({ message: t('config.providerId'), default: 'custom-1' })).trim() || 'custom-1' : selected;
   const baseUrl = selected === 'custom' ? (await input({ message: t('config.baseUrl') })).trim() : undefined;
   if (selected === 'custom' && !baseUrl) { console.log(t('config.baseUrlRequired')); return; }
-  const modelDefaults: Record<string, string> = { openai: DEFAULT_OPENAI_MODEL, gemini: 'gemini-2.5-flash', anthropic: 'claude-3-5-sonnet-latest' };
+  const modelDefaults: Record<string, string> = { openai: DEFAULT_OPENAI_MODEL, ...PROVIDER_DEFAULT_MODELS };
   const enteredModel = (await input({ message: t('config.model'), ...(modelDefaults[selected] ? { default: modelDefaults[selected] } : {}) })).trim();
   if (selected === 'custom' && !enteredModel) { console.log(t('config.modelRequired')); return; }
   const defaultModel = enteredModel || modelDefaults[selected] || 'default';
