@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { execFile } from 'node:child_process';
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
@@ -10,6 +10,7 @@ import { promisify } from 'node:util';
 import { createSeed, type HarvestType } from '../src/domain.js';
 import { generateHarvestDocument, type HarvestInput } from '../src/ai/harvest-document.js';
 import type { ProviderMessage } from '../src/ai/contracts.js';
+import { getProvider, OpenAICompatibleProvider } from '../src/ai/transport.js';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -97,5 +98,67 @@ describe('harvest document grammar', () => {
       }) };
     await generateHarvestDocument(seed, type, 'en', input, { provider: provider as never });
     expect(sent[0]!.map((message) => message.content).join('\n')).toContain(expected);
+  });
+});
+
+describe('OpenAI token limit parameter', () => {
+  const messages: ProviderMessage[] = [{ role: 'user', content: 'Hello' }];
+  const config = (baseUrl?: string, type: 'openai' | 'custom' = 'openai') => ({ id: 'openai', name: 'openai', type, defaultModel: 'test-model', enabled: true, maxTokens: 512, ...(baseUrl ? { baseUrl } : {}) });
+  let fetchMock: ReturnType<typeof vi.fn>;
+  // Chat and ask build the same body, so both paths are asserted for every endpoint.
+  const bodiesFor = async (provider: OpenAICompatibleProvider): Promise<Array<Record<string, unknown>>> => {
+    await provider.chat(messages);
+    await provider.ask('Hello');
+    return fetchMock.mock.calls.map((call) => JSON.parse((call[1] as RequestInit).body as string) as Record<string, unknown>);
+  };
+
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+  beforeEach(() => {
+    // An inherited SEED_OPENAI_BASE_URL would turn the "default endpoint" cases into custom ones.
+    vi.stubEnv('SEED_OPENAI_BASE_URL', '');
+    fetchMock = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  it('sends max_completion_tokens to the default OpenAI endpoint', async () => {
+    const [chat, ask] = await bodiesFor(new OpenAICompatibleProvider(config(), 'key', 'en'));
+    expect(fetchMock.mock.calls[0]![0]).toBe('https://api.openai.com/v1/chat/completions');
+    expect(chat).toMatchObject({ max_completion_tokens: 512 });
+    expect(chat).not.toHaveProperty('max_tokens');
+    expect(ask).toMatchObject({ max_completion_tokens: 512 });
+    expect(ask).not.toHaveProperty('max_tokens');
+  });
+
+  it('treats an explicit default base URL with a trailing slash as the default endpoint', async () => {
+    const [chat] = await bodiesFor(new OpenAICompatibleProvider(config('https://api.openai.com/v1/'), 'key', 'en'));
+    expect(chat).toMatchObject({ max_completion_tokens: 512 });
+    expect(chat).not.toHaveProperty('max_tokens');
+  });
+
+  it('keeps max_tokens for a custom OpenAI-compatible endpoint', async () => {
+    const [chat, ask] = await bodiesFor(new OpenAICompatibleProvider(config('https://llm.example.test/v1'), 'key', 'en'));
+    expect(fetchMock.mock.calls[0]![0]).toBe('https://llm.example.test/v1/chat/completions');
+    expect(chat).toMatchObject({ max_tokens: 512 });
+    expect(chat).not.toHaveProperty('max_completion_tokens');
+    expect(ask).toMatchObject({ max_tokens: 512 });
+    expect(ask).not.toHaveProperty('max_completion_tokens');
+  });
+
+  it('applies the default-endpoint rule when getProvider resolves the OpenAI provider from config', async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), 'seed-token-home-'));
+    try {
+      await writeFile(path.join(home, 'config.json'), JSON.stringify({ version: 1, activeProvider: 'openai', providers: [config()] }));
+      vi.stubEnv('SEED_HOME', home);
+      vi.stubEnv('SEED_OPENAI_API_KEY', 'test-key');
+      vi.stubEnv('SEED_OPENAI_AUTH_FILE', path.join(home, 'missing-auth.json'));
+      const provider = await getProvider(undefined, undefined, 'en');
+      await provider.ask('Hello');
+      expect(fetchMock.mock.calls[0]![0]).toBe('https://api.openai.com/v1/chat/completions');
+      const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string) as Record<string, unknown>;
+      expect(body).toMatchObject({ max_completion_tokens: 512 });
+      expect(body).not.toHaveProperty('max_tokens');
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   });
 });

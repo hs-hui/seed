@@ -84,6 +84,15 @@ function normalizeProviderTurns(messages: ProviderMessage[]): Array<{ role: 'use
   return turns;
 }
 
+/**
+ * The official OpenAI API rejects max_tokens for current models and requires
+ * max_completion_tokens, while OpenAI-compatible servers still expect the
+ * legacy name. Only the default endpoint gets the new field.
+ */
+function tokenLimitField(config: ProviderConfig, base: string, limit: number): Record<string, number> {
+  return config.type === 'openai' && base === 'https://api.openai.com/v1' ? { max_completion_tokens: limit } : { max_tokens: limit };
+}
+
 export class OpenAICompatibleProvider implements LLMProvider {
   constructor(public readonly config: ProviderConfig, private readonly apiKey: string, private readonly language: ProviderLanguage = 'en') {}
   get id(): string { return this.config.id; }
@@ -100,7 +109,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const data = await requestJson<{ choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }> }>(`${base}/chat/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({ model: this.config.defaultModel, ...(this.config.temperature !== undefined ? { temperature: this.config.temperature } : {}), ...(this.config.maxTokens ? { max_tokens: this.config.maxTokens } : {}), messages: [
+      body: JSON.stringify({ model: this.config.defaultModel, ...(this.config.temperature !== undefined ? { temperature: this.config.temperature } : {}), ...(this.config.maxTokens ? tokenLimitField(this.config, base, this.config.maxTokens) : {}), messages: [
         { role: 'system', content: providerInstructions(this.language) },
         ...messages.map((message) => ({ role: message.role, content: message.content })),
       ] }),
@@ -122,7 +131,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const data = await requestJson<{ choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }> }>(`${base}/chat/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({ model: this.config.defaultModel, ...(this.config.temperature !== undefined ? { temperature: this.config.temperature } : {}), ...(this.config.maxTokens ? { max_tokens: this.config.maxTokens } : {}), messages: [
+      body: JSON.stringify({ model: this.config.defaultModel, ...(this.config.temperature !== undefined ? { temperature: this.config.temperature } : {}), ...(this.config.maxTokens ? tokenLimitField(this.config, base, this.config.maxTokens) : {}), messages: [
         { role: 'system', content: providerInstructions(this.language) },
         { role: 'user', content: prompt },
       ] }),
