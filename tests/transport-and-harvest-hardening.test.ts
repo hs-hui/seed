@@ -3,13 +3,17 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { loadConfig, migrateLegacyOAuthModel } from '../src/storage/store.js';
-import { OpenAICompatibleProvider } from '../src/ai/transport.js';
+import { OpenAICompatibleProvider, OpenAIOAuthProvider, providerTimeoutSignal } from '../src/ai/transport.js';
+import { generateText } from 'ai';
+
+vi.mock('ai', async (importOriginal) => ({ ...(await importOriginal<typeof import('ai')>()), generateText: vi.fn() }));
 
 const originalFetch = globalThis.fetch;
 const envKeys = ['SEED_HOME'];
 const savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  vi.mocked(generateText).mockReset();
   for (const key of envKeys) { if (savedEnv[key] === undefined) delete process.env[key]; else process.env[key] = savedEnv[key]; }
 });
 
@@ -49,5 +53,26 @@ describe('Gemini API key transport (#34)', () => {
       expect(call.url).not.toContain('secret-key-123');
       expect(new Headers(call.init?.headers).get('x-goog-api-key')).toBe('secret-key-123');
     }
+  });
+});
+
+describe('OAuth provider timeout cancels the request (#35)', () => {
+  it('creates a signal that aborts after the configured limit', async () => {
+    process.env.SEED_AI_TIMEOUT_MS = '20';
+    const signal = providerTimeoutSignal();
+    expect(signal.aborted).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(signal.aborted).toBe(true);
+  });
+
+  it('aborts the SDK request on timeout and still reports the timeout message', async () => {
+    process.env.SEED_AI_TIMEOUT_MS = '20';
+    // Mimic the SDK: the call stays pending until its abort signal fires.
+    vi.mocked(generateText).mockImplementation(((options: { abortSignal?: AbortSignal }) => new Promise((_resolve, reject) => {
+      options.abortSignal?.addEventListener('abort', () => reject(options.abortSignal?.reason));
+    })) as unknown as typeof generateText);
+    const provider = new OpenAIOAuthProvider({ id: 'openai', name: 'openai', type: 'openai', connectionMode: 'oauth', defaultModel: 'gpt-test', enabled: true });
+    await expect(provider.ask('Hello')).rejects.toThrow('openai request timed out after 20ms.');
+    expect(vi.mocked(generateText).mock.calls[0]![0].abortSignal?.aborted).toBe(true);
   });
 });

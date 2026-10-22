@@ -21,13 +21,22 @@ function timeoutMs(): number {
 function retryable(status: number): boolean { return status === 408 || status === 409 || status === 429 || status >= 500; }
 async function wait(ms: number): Promise<void> { await new Promise((resolve) => setTimeout(resolve, ms)); }
 
+/**
+ * Cancels the SDK request itself when the limit passes. Without it the
+ * promise race rejects but the HTTP call keeps running in the background.
+ */
+export function providerTimeoutSignal(): AbortSignal { return AbortSignal.timeout(timeoutMs()); }
+
 async function withProviderTimeout<T>(promise: Promise<T>, provider: string): Promise<T> {
   const limit = timeoutMs();
+  const timeout = () => new Error(`${provider} request timed out after ${limit}ms.`);
+  // The request's signal was created before this timer, so its abort fires first and surfaces as an abort error.
+  const aborted = (error: unknown): boolean => ['AbortError', 'TimeoutError'].includes((error as { name?: string } | null)?.name ?? '');
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await new Promise<T>((resolve, reject) => {
-      timer = setTimeout(() => reject(new Error(`${provider} request timed out after ${limit}ms.`)), limit);
-      promise.then(resolve, reject);
+      timer = setTimeout(() => reject(timeout()), limit);
+      promise.then(resolve, (error: unknown) => reject(aborted(error) ? timeout() : error));
     });
   } finally {
     if (timer) clearTimeout(timer);
@@ -209,6 +218,7 @@ export class OpenAIOAuthProvider implements LLMProvider {
       system,
       messages: messages.filter((message) => message.role !== 'system').map((message) => ({ role: message.role, content: message.content })),
       ...this.generationSettings(),
+      abortSignal: providerTimeoutSignal(),
     }), this.config.name);
     return result.text;
   }
@@ -220,7 +230,7 @@ export class OpenAIOAuthProvider implements LLMProvider {
   }
   async listModels(): Promise<string[]> { return [this.model]; }
   async ask(prompt: string): Promise<string> {
-    const result = await withProviderTimeout(generateText({ model: this.client(this.config.defaultModel), system: providerInstructions(this.language), prompt, ...this.generationSettings() }), this.config.name);
+    const result = await withProviderTimeout(generateText({ model: this.client(this.config.defaultModel), system: providerInstructions(this.language), prompt, ...this.generationSettings(), abortSignal: providerTimeoutSignal() }), this.config.name);
     return result.text;
   }
 }
