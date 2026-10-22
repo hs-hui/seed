@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { atomicWrite } from '../src/utils/fs.js';
+import { atomicWrite, listFiles } from '../src/utils/fs.js';
 import { SeedStore } from '../src/storage/store.js';
 import { plant } from '../src/core/seed-manager.js';
 
@@ -67,6 +67,32 @@ describe('Windows atomic replacement', () => {
       expect(attempts).toBe(21);
       expect(await readFile(file, 'utf8')).toBe('old');
       expect(await readdir(root)).toEqual(['seed.json']);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+});
+
+describe('record listing', () => {
+  it('returns only files with the requested extension and never staging files', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'seed-list-'));
+    try {
+      await writeFile(path.join(dir, 'a.json'), '{}', 'utf8');
+      await writeFile(path.join(dir, 'b.md'), '', 'utf8');
+      await writeFile(path.join(dir, 'a.json.1.7d1f.tmp'), '{}', 'utf8');
+      await writeFile(path.join(dir, 'c.tmp'), '', 'utf8');
+      expect(await listFiles(dir)).toEqual([path.join(dir, 'a.json')]);
+      expect(await listFiles(dir, '.md')).toEqual([path.join(dir, 'b.md')]);
+      expect((await listFiles(dir, '')).sort()).toEqual([path.join(dir, 'a.json'), path.join(dir, 'b.md')]);
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+
+  it('does not return a leftover staging file as a second conversation record', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'seed-conversation-tmp-'));
+    try {
+      const store = new SeedStore(root);
+      const entry = { id: 'c1', seedId: 's1', role: 'user' as const, type: 'question' as const, content: 'hi', createdAt: '2026-01-01T00:00:00.000Z' };
+      await store.appendConversation(entry);
+      await writeFile(path.join(store.base, 'conversations', 'c1.json.1.7d1f.tmp'), `${JSON.stringify(entry, null, 2)}\n`, 'utf8');
+      expect(await store.conversations('s1')).toEqual([entry]);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 });

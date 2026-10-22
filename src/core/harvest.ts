@@ -262,7 +262,7 @@ function render(seed: SeedState, type: HarvestType, lang: 'en' | 'ko', context: 
 
 async function harvestOneUnlocked(store: SeedStore, seed: SeedState, type: HarvestType, lang: 'en' | 'ko', draft: boolean, generated?: string): Promise<string> {
   const dir = path.join(store.base, 'harvest'); await ensureDir(dir);
-  const existing = (await listFiles(dir)).filter((file) => new RegExp(`${type}-v\\d+\\.md$`).test(file));
+  const existing = (await listFiles(dir, '.md')).filter((file) => new RegExp(`${type}-v\\d+\\.md$`).test(file));
   // Use the highest existing version rather than the file count. This keeps
   // harvesting append-only even when an older artifact was removed manually.
   const version = existing.reduce((highest, filePath) => {

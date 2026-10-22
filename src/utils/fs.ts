@@ -122,9 +122,12 @@ export async function appendJsonLine(filePath: string, value: unknown): Promise<
 export async function backup(filePath: string, backupPath: string): Promise<void> {
   if (await exists(filePath)) { await ensureDir(path.dirname(backupPath)); await copyFile(filePath, backupPath); }
 }
-export async function listFiles(dir: string): Promise<string[]> {
+/** Lists record files by extension; pass '' to list every file. Staging files (*.tmp) are never records. */
+export async function listFiles(dir: string, extension = '.json'): Promise<string[]> {
   if (!(await exists(dir))) return [];
-  return (await readdir(dir, { withFileTypes: true })).filter((entry) => entry.isFile()).map((entry) => path.join(dir, entry.name));
+  return (await readdir(dir, { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && entry.name.endsWith(extension) && !entry.name.endsWith('.tmp'))
+    .map((entry) => path.join(dir, entry.name));
 }
 export async function ensureLine(filePath: string, line: string): Promise<void> {
   const key = queueKey(filePath);
