@@ -78,3 +78,48 @@ describe('CLI prune with an explicit item', () => {
     expect(await readdir(conversationDir).catch(() => [])).toHaveLength(before.length);
   }, 60_000);
 });
+
+describe('CLI default Seed targeting', () => {
+  let root: string;
+  let parent: string;
+  let child: string;
+  let home: string;
+  let env: NodeJS.ProcessEnv;
+  let childId: string;
+
+  beforeAll(async () => {
+    root = await mkdtemp(path.join(os.tmpdir(), 'seed-targeting-'));
+    parent = path.join(root, 'parent');
+    child = path.join(parent, 'project');
+    home = path.join(root, 'home');
+    await mkdir(child, { recursive: true }); await mkdir(home, { recursive: true });
+    childId = (await plant(new SeedStore(child), 'A child project tracker for remote teams')).id;
+    env = cliEnv(home, 'http://127.0.0.1:9/v1');
+  });
+
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('does not target a Seed in a child folder from a parent without .seed/', async () => {
+    const result = await runSeed(parent, env, ['tree']);
+    expect(result.code).not.toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ error: 'no-seed' });
+  });
+
+  it('targets the nearest Seed from inside the child project', async () => {
+    const result = await runSeed(child, env, ['tree']);
+    expect(result.code).toBe(0);
+  });
+
+  it('still selects a child Seed explicitly with --seed from the parent', async () => {
+    const result = await runSeed(parent, env, ['tree', '--seed', childId]);
+    expect(result.code).toBe(0);
+  });
+
+  it('lists child Seeds from the parent through the garden command', async () => {
+    const result = await runSeed(parent, env, ['garden']);
+    expect(result.code).toBe(0);
+    expect((JSON.parse(result.stdout) as Array<{ id: string }>).map((entryItem) => entryItem.id)).toContain(childId);
+  });
+});

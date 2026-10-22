@@ -153,19 +153,11 @@ async function targetStore(selector?: string): Promise<SeedStore> {
   // Read-only commands must not create `.seed/` in an ordinary directory.
   // Planting remains the sole entry point that intentionally creates a root.
   const currentRoot = workspace.rootOverride ?? await findSeedRoot() ?? path.resolve(process.cwd());
-  const current = new SeedStore(currentRoot);
-  const entries = await gardenEntries(current.root);
-  if (!selector) {
-    if (entries.length <= 1) return entries[0] ? new SeedStore(entries[0].path) : current;
-    // Interactive commands choose a Seed when a garden contains more than
-    // one project. JSON/non-interactive callers keep the nearest project as
-    // a deterministic default and can opt into another with --seed.
-    if (process.stdin.isTTY && !hasFlag('--json') && !process.argv.includes('--no-input')) {
-      const selected = await select({ message: t('garden.choose'), choices: entries.map((entry) => ({ name: `${entry.seed.name} (${entry.seed.maturity}%) — ${statusLabel(entry.seed.status)}`, value: entry.path })) });
-      return new SeedStore(selected);
-    }
-    return current;
-  }
+  // The default target is the Seed the command is run inside. Scanning nearby
+  // folders would let a child project answer for a parent without `.seed/`,
+  // so the garden is searched only when a Seed is named explicitly.
+  if (!selector) return new SeedStore(currentRoot);
+  const entries = await gardenEntries(currentRoot);
   const normalized = selector.trim().toLocaleLowerCase();
   const match = entries.find((entry) => entry.seed.id.toLocaleLowerCase() === normalized || entry.seed.name.toLocaleLowerCase() === normalized);
   if (!match) throw new Error('seed-selection-not-found');
