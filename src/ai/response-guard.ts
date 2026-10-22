@@ -147,7 +147,7 @@ export function unusedSafeQuestion(language: ProviderLanguage, focus: GrowthFocu
   if (genericCandidate) return genericCandidate;
   const base = language === 'ko' ? '지금 떠오르는 한 가지를 말해볼까요?' : 'What is one thing that comes to mind?';
   for (let index = 2; index <= 100; index += 1) {
-    const numbered = language === 'ko' ? `${base.slice(0, -1)} (${index})?` : `${base.slice(0, -1)} (${index})?`;
+    const numbered = `${base.slice(0, -1)} (${index})?`;
     if (!seen.has(numbered.toLocaleLowerCase())) return numbered;
   }
   return safeQuestionFor(language, focus);

@@ -13,7 +13,7 @@ export function parseJsonObject(response: string): Record<string, unknown> | und
  * a short label or a one-line explanation instead. Normalize those harmless
  * variations so a formatting hiccup does not turn a help request into idea
  * evidence. Long, unrelated prose is deliberately ignored and lets the
- * caller reuse its local safety net (unknown text remains an `answer`).
+ * caller decide what to do with it (unknown text remains an `answer`).
  */
 export function normalizeGrowthInputIntent(response: string): GrowthInputIntent | undefined {
   const parsed = parseJsonObject(response);

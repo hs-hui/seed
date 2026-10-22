@@ -9,7 +9,6 @@ const SEED_LOGO = [
   '╚══════╝╚══════╝╚══════╝╚═════╝',
 ].join('\n');
 
-export const logoText = SEED_LOGO;
 export const logoOutput = chalk.green(`${SEED_LOGO}\n`);
 
 /** Clear a real interactive terminal between conversational turns so an
