@@ -148,7 +148,7 @@ You can also set your language permanently with `seed config set lang ko`. Whate
 
 ## Where does my data go?
 
-Everything Seed knows about your idea lives in a `.seed/` folder inside your project — plain JSON and Markdown files, nothing hidden or sent anywhere unless you've connected an AI provider. Seed also adds `.seed/` to your project's `.gitignore` when you plant an idea (creating the file if it doesn't exist), and `seed evolve` creates a new child folder inside your project folder. Seed never edits your source code or other project files.
+Everything Seed knows about your idea lives in a `.seed/` folder inside your project — plain JSON and Markdown files, nothing hidden or sent anywhere unless you've connected an AI provider. Seed also adds `.seed/` to your project's `.gitignore` when you plant an idea (creating the file if it doesn't exist), and `seed evolve` creates a new child folder inside your project folder. Seed never edits your source code or other project files. The `--web` option of `seed sunlight` sends the idea summary to a public search engine, and it is off by default.
 
 ## Command reference
 
