@@ -178,10 +178,11 @@ function withLocalContradictions(update: GrowthUpdate, seed: SeedState, answer: 
 
 function parseGrowthUpdate(response: string, before: string, answer: string, language: ProviderLanguage): GrowthUpdate {
   const parsed = parseJsonObject(response);
-  const rawSummary = typeof parsed?.updatedSummary === 'string' ? parsed.updatedSummary : parsed?.summary;
-  let updatedSummary = typeof rawSummary === 'string' && rawSummary.trim()
-    ? rawSummary.trim().slice(0, 240)
-    : `${before} — ${answer.trim()}`.slice(0, 240);
+  // Without a provider summary the caller would still raise maturity, so an
+  // empty or non-JSON reply must fail instead of being saved as a success.
+  const rawSummary = [parsed?.updatedSummary, parsed?.summary].find((value): value is string => typeof value === 'string' && Boolean(value.trim()));
+  if (!rawSummary) throw new Error('ai-response-invalid');
+  let updatedSummary = rawSummary.trim().slice(0, 240);
   // Keep generated reflections as approachable as generated questions. If a
   // provider leaks product jargon into the summary, fall back to the user's
   // own words instead of making them decode an internal planning label.
