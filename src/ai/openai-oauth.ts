@@ -1,3 +1,4 @@
+import { confirm } from '@inquirer/prompts';
 import { openaiCredentials } from '@openai-oauth/local';
 import { runOpenAIOAuthLogin } from 'openai-oauth';
 import { spawn } from 'node:child_process';
@@ -27,21 +28,39 @@ async function fileExists(filePath: string): Promise<boolean> {
   try { await stat(filePath); return true; } catch { return false; }
 }
 
-async function prepareAuthFile(): Promise<string> {
+function legacyCodexAuthPath(): string {
+  return path.join(os.homedir(), '.codex', 'auth.json');
+}
+
+/**
+ * Offer once, at login time, to reuse the Codex CLI session. The copy carries a
+ * refresh token, so it needs an explicit yes from an interactive user and is
+ * never made on the request path.
+ */
+async function importCodexAuthWithConsent(language: OAuthLanguage, json: boolean): Promise<boolean> {
   const target = openAIAuthFilePath();
-  if (!process.env.SEED_OPENAI_AUTH_FILE && !(await fileExists(target))) {
-    const legacy = path.join(os.homedir(), '.codex', 'auth.json');
-    if (await fileExists(legacy)) {
-      await mkdir(path.dirname(target), { recursive: true });
-      await copyFile(legacy, target);
-      try { await chmod(target, 0o600); } catch { /* Windows ACLs are managed by the user profile. */ }
-    }
+  const legacy = legacyCodexAuthPath();
+  if (process.env.SEED_OPENAI_AUTH_FILE || await fileExists(target) || !await fileExists(legacy)) return false;
+  // Prompts write to stdout, which must stay machine-readable in --json mode.
+  if (json || !process.stdin.isTTY) return false;
+  const message = language === 'ko'
+    ? `Codex CLI 로그인 정보(${legacy})를 Seed 인증 파일(${target})로 복사할까요? 갱신 토큰도 함께 복사됩니다.`
+    : `Copy your Codex CLI sign-in (${legacy}) to Seed's auth file (${target})? This includes its refresh token.`;
+  if (!(await confirm({ message, default: false }))) return false;
+  await mkdir(path.dirname(target), { recursive: true });
+  await copyFile(legacy, target);
+  try { await chmod(target, 0o600); } catch { /* Windows ACLs are managed by the user profile. */ }
+  return true;
+}
+
+/** Request-time guard: explain a Codex session that was never imported, but never copy it. */
+export async function ensureOpenAIAuthFile(): Promise<string> {
+  const target = openAIAuthFilePath();
+  if (!process.env.SEED_OPENAI_AUTH_FILE && !(await fileExists(target)) && await fileExists(legacyCodexAuthPath())) {
+    throw new Error('openai-oauth-not-imported: run `seed config login openai` to connect your OpenAI account');
   }
   return target;
 }
-
-/** Ensure legacy Codex credentials are copied before an OAuth client is built. */
-export async function ensureOpenAIAuthFile(): Promise<string> { return prepareAuthFile(); }
 
 function normalize(session: {
   accessToken: string;
@@ -95,7 +114,7 @@ function openLoginUrl(message: string, language: OAuthLanguage, write: OAuthWrit
 /** Read the local Codex auth file without forcing a refresh. */
 export async function loadOpenAITokens(): Promise<OpenAITokens | null> {
   try {
-    const credentials = openaiCredentials({ authFilePath: await prepareAuthFile(), ensureFresh: false });
+    const credentials = openaiCredentials({ authFilePath: openAIAuthFilePath(), ensureFresh: false });
     const session = await credentials.getSession();
     return session ? normalize(session) : null;
   } catch {
@@ -106,7 +125,7 @@ export async function loadOpenAITokens(): Promise<OpenAITokens | null> {
 /** Read local Codex credentials and refresh them when the package requires it. */
 export async function getOpenAIToken(): Promise<string | undefined> {
   try {
-    const credentials = openaiCredentials({ authFilePath: await prepareAuthFile(), ensureFresh: true });
+    const credentials = openaiCredentials({ authFilePath: openAIAuthFilePath(), ensureFresh: true });
     const session = await credentials.getSession();
     return session?.accessToken;
   } catch {
@@ -116,7 +135,12 @@ export async function getOpenAIToken(): Promise<string | undefined> {
 
 /** Run the package's loopback browser OAuth flow and save Seed's auth file. */
 export async function loginOpenAI(language: OAuthLanguage = 'en', json = false): Promise<OpenAITokens> {
-  const authFilePath = await prepareAuthFile();
+  if (await importCodexAuthWithConsent(language, json)) {
+    // The user chose to reuse the Codex session, so the browser sign-in is unnecessary.
+    const imported = await loadOpenAITokens();
+    if (imported) return imported;
+  }
+  const authFilePath = openAIAuthFilePath();
   // JSON callers still need the browser URL, but it must not corrupt stdout.
   // Keep the machine-readable result on stdout and send OAuth progress to stderr.
   const write: OAuthWriter = json ? (message) => console.error(message) : (message) => console.log(message);
