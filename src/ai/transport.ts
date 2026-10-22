@@ -1,4 +1,4 @@
-import { loadConfig, type ProviderConfig } from '../storage/store.js';
+import { loadConfig, migrateLegacyOAuthModel, type ProviderConfig } from '../storage/store.js';
 import { ensureOpenAIAuthFile, getOpenAIToken, openAIAuthFilePath } from './openai-oauth.js';
 import { createOpenAIOAuth } from '@openai-oauth/ai-sdk';
 import { openaiCredentials } from '@openai-oauth/local';
@@ -242,8 +242,8 @@ export async function testProviderConnection(config: ProviderConfig, language: P
   // unrelated OPENAI_API_KEY environment variable make an OAuth config look
   // healthy while the account session is actually missing.
   const oauthToken = oauth ? await getOpenAIToken() : undefined;
-  const resolved = oauth && config.defaultModel === 'gpt-5.3-codex'
-    ? { ...config, defaultModel: DEFAULT_OPENAI_OAUTH_MODEL } : config;
+  // Configs passed straight in (login/wizard before saving) have not been normalized yet.
+  const resolved = oauth ? { ...config, defaultModel: migrateLegacyOAuthModel(config.defaultModel) } : config;
   const client = resolved.type === 'openai' && resolved.connectionMode === 'oauth'
     ? oauthToken ? new OpenAIOAuthProvider(resolved, language) : undefined
     : key ? new OpenAICompatibleProvider(resolved, key, language) : undefined;
@@ -274,7 +274,8 @@ export async function getProvider(id?: string, model?: string, language: Provide
   // ChatGPT-account OAuth does not expose every Codex model. Older Seed
   // versions suggested gpt-5.3-codex, which the OAuth endpoint rejects with
   // HTTP 400; transparently move that legacy default to a supported model.
-  if (useOAuth && resolved.defaultModel === 'gpt-5.3-codex') resolved.defaultModel = DEFAULT_OPENAI_OAUTH_MODEL;
+  // The model argument and SEED_OPENAI_OAUTH_MODEL bypass loadConfig, so migrate here as well.
+  if (useOAuth) resolved.defaultModel = migrateLegacyOAuthModel(resolved.defaultModel);
   if (id && !key) throw new Error('provider-credential-missing');
   if (useOAuth) {
     await ensureOpenAIAuthFile();

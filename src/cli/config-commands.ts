@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
 import { t, currentLanguage, setLanguage } from '../i18n/index.js';
-import { loadConfig } from '../storage/store.js';
+import { loadConfig, migrateLegacyOAuthModel } from '../storage/store.js';
 import { DEFAULT_OPENAI_MODEL, DEFAULT_OPENAI_OAUTH_MODEL, getProvider, providerKey, testProviderConnection } from '../ai/provider.js';
 import { loginOpenAI } from '../ai/openai-oauth.js';
 import { PROVIDER_DEFAULT_MODELS } from '../ai/defaults.js';
@@ -123,11 +123,10 @@ export function registerConfigCommands(program: Command, deps: ConfigCommandDeps
   config.command('login').argument('<provider>').description(t('cli.configLogin')).action(async (provider: string, options: CommonOptions) => run(async () => {
     if (provider !== 'openai') throw new Error(t('error.onlyOpenAIAccount'));
     await loginOpenAI(currentLanguage(), jsonRequested(options)); const value = await loadConfig(); const existing = value.providers.find((entry) => entry.id === 'openai');
-    const configuredModel = process.env.SEED_OPENAI_OAUTH_MODEL?.trim();
-    const defaultModel = configuredModel && configuredModel !== 'gpt-5.3-codex'
-      ? configuredModel
-      : existing?.connectionMode === 'oauth' && existing.defaultModel && existing.defaultModel !== 'gpt-5.3-codex'
-        ? existing.defaultModel : DEFAULT_OPENAI_OAUTH_MODEL;
+    // A retired model is skipped rather than migrated, so the stored or default model wins as before.
+    const usable = (model?: string) => model && migrateLegacyOAuthModel(model) === model ? model : undefined;
+    const defaultModel = usable(process.env.SEED_OPENAI_OAUTH_MODEL?.trim())
+      ?? (existing?.connectionMode === 'oauth' ? usable(existing.defaultModel) : undefined) ?? DEFAULT_OPENAI_OAUTH_MODEL;
     const openai = { ...(existing ?? { id: 'openai', name: 'openai', type: 'openai' as const, enabled: true }), enabled: true, defaultModel, connectionMode: 'oauth' as const };
     await testProviderConnection(openai, currentLanguage());
     value.providers = [...value.providers.filter((entry) => entry.id !== 'openai'), openai]; value.activeProvider = 'openai'; await persistConfig(value); print(jsonRequested(options) ? value : t('config.saved'), jsonRequested(options));

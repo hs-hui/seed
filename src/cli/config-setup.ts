@@ -1,6 +1,6 @@
 import { input, select } from '@inquirer/prompts';
 import { currentLanguage, t } from '../i18n/index.js';
-import { loadConfig, loadGlobalConfig, projectConfigPath, saveConfig, saveProjectConfig, type GlobalConfig, type ProviderConfig } from '../storage/store.js';
+import { loadConfig, loadGlobalConfig, migrateLegacyOAuthModel, projectConfigPath, saveConfig, saveProjectConfig, type GlobalConfig, type ProviderConfig } from '../storage/store.js';
 import { DEFAULT_OPENAI_MODEL, DEFAULT_OPENAI_OAUTH_MODEL, providerKey, testProviderConnection } from '../ai/provider.js';
 import { getOpenAIToken, loginOpenAI } from '../ai/openai-oauth.js';
 import { PROVIDER_DEFAULT_MODELS } from '../ai/defaults.js';
@@ -52,9 +52,9 @@ export async function configWizard(): Promise<void> {
   if (selected === 'openai-oauth') {
     console.log(t('config.oauthExperimental'));
     const configuredModel = process.env.SEED_OPENAI_OAUTH_MODEL?.trim();
-    const defaultOAuthModel = configuredModel === 'gpt-5.3-codex' ? DEFAULT_OPENAI_OAUTH_MODEL : configuredModel || DEFAULT_OPENAI_OAUTH_MODEL;
+    const defaultOAuthModel = migrateLegacyOAuthModel(configuredModel || DEFAULT_OPENAI_OAUTH_MODEL);
     const enteredModel = (await input({ message: t('config.model'), default: defaultOAuthModel })).trim();
-    const oauthModel = enteredModel === 'gpt-5.3-codex' ? DEFAULT_OPENAI_OAUTH_MODEL : enteredModel || defaultOAuthModel;
+    const oauthModel = migrateLegacyOAuthModel(enteredModel || defaultOAuthModel);
     await loginOpenAI(currentLanguage());
     const existing = current.providers.find((provider) => provider.id === 'openai');
     const oauthProvider = {

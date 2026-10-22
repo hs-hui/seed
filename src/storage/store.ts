@@ -94,6 +94,14 @@ function sanitizeProvider(provider: ProviderConfig): ProviderConfig {
   for (const field of ['apiKey', 'api_key', 'token', 'accessToken', 'refreshToken', 'oauthTokens', 'credentials']) delete safe[field];
   return safe as ProviderConfig;
 }
+/**
+ * The single definition of the retired OAuth default. Every config load and
+ * save goes through normalizeConfig, and provider/CLI paths that see a model
+ * from an env var or argument call this same function.
+ */
+export function migrateLegacyOAuthModel(model: string): string {
+  return model === 'gpt-5.3-codex' ? 'gpt-5.6-luna' : model;
+}
 function normalizeConfig(config: GlobalConfig): GlobalConfig {
   const providers = (Array.isArray(config.providers) ? config.providers : [])
     .map((provider) => {
@@ -126,8 +134,8 @@ function normalizeConfig(config: GlobalConfig): GlobalConfig {
     activeProvider,
     providers: providers.map((provider) => {
       const safe = sanitizeProvider(provider);
-      return safe.type === 'openai' && safe.connectionMode === 'oauth' && safe.defaultModel === 'gpt-5.3-codex'
-        ? { ...safe, defaultModel: 'gpt-5.6-luna' } : safe;
+      return safe.type === 'openai' && safe.connectionMode === 'oauth'
+        ? { ...safe, defaultModel: migrateLegacyOAuthModel(safe.defaultModel) } : safe;
     }),
   };
 }
