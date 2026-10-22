@@ -46,11 +46,13 @@ export function registerShapeCommands(program: Command, deps: {
 
   const prune = addCommon(program.command('prune').description(t('help.prune'))).argument('[item]', t('cli.pruneArgument'));
   prune.action(async (item: string | undefined, options: CommonOptions) => run(async () => {
-    const store = await targetStore(options.seed); const seed = await currentSeed(store); if (seed.status === 'dormant') throw new Error('seed-dormant'); const suggestions = await pruneSuggestions(seed, options.provider, options.model, currentLanguage());
-    for (const suggestion of suggestions) await addConversation(store, { seedId: seed.id, role: 'assistant', type: 'prune-suggestion', content: `${suggestion.item} — ${suggestion.reason}`, metadata: { source: 'prune' } });
+    const store = await targetStore(options.seed); const seed = await currentSeed(store); if (seed.status === 'dormant') throw new Error('seed-dormant');
     item ??= options.branch;
     let items: string[] = item ? [item] : [];
+    // An explicit item is a direct request: prune it without an AI provider or suggestion history.
     if (!item) {
+      const suggestions = await pruneSuggestions(seed, options.provider, options.model, currentLanguage());
+      for (const suggestion of suggestions) await addConversation(store, { seedId: seed.id, role: 'assistant', type: 'prune-suggestion', content: `${suggestion.item} — ${suggestion.reason}`, metadata: { source: 'prune' } });
       if (options.json || !process.stdin.isTTY || options.input === false) { print({ suggestions }, Boolean(options.json)); return; }
       if (!suggestions.length) { console.log(t('prune.none')); return; }
       // Pruning is reversible and can shape several non-core items at once.
