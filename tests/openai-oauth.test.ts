@@ -132,5 +132,14 @@ describe('OpenAI account credentials', () => {
     it('keeps the Codex originator marker that the login flow depends on', () => {
       expect(addCodexOriginator('https://auth.openai.com/oauth/authorize?client_id=test')).toContain('originator=codex_cli_rs');
     });
+
+    it('states in both READMEs that account login is experimental and unofficial', async () => {
+      const en = (await readme('README.md')).split('\n').find((line) => line.startsWith('- **OpenAI**'));
+      const ko = (await readme('README.ko.md')).split('\n').find((line) => line.startsWith('- **OpenAI**'));
+      expect(en).toMatch(/experimental/i);
+      expect(en).toMatch(/unofficial/i);
+      expect(ko).toContain('실험');
+      expect(ko).toContain('비공식');
+    });
   });
 });

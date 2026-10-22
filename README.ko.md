@@ -121,7 +121,7 @@ seed config
 
 짧은 설정 마법사가 뜨고, 다음 중 하나를 고를 수 있습니다:
 
-- **OpenAI** — 계정으로 로그인하거나 API 키 사용
+- **OpenAI** — 계정으로 로그인하거나 API 키 사용. 계정 로그인은 실험적 기능이며 비공식 로그인 방식을 사용해 동작이 중단될 수 있으니, 지원되는 방법은 API 키 모드입니다.
 - **Google Gemini** — API 키
 - **Anthropic Claude** — API 키
 - **커스텀 프로바이더** — OpenAI 호환 API라면 무엇이든 (OpenRouter, Groq, 직접 운영하는 모델 등)

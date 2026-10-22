@@ -121,7 +121,7 @@ seed config
 
 This opens a short setup wizard where you can choose:
 
-- **OpenAI** — sign in with your account, or use an API key
+- **OpenAI** — sign in with your account, or use an API key. Account sign-in is experimental: it uses an unofficial login flow that may stop working, so API key mode is the supported path.
 - **Google Gemini** — API key
 - **Anthropic Claude** — API key
 - **A custom provider** — any OpenAI-compatible API (OpenRouter, Groq, a self-hosted model, etc.)

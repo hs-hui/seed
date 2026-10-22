@@ -90,6 +90,12 @@ function openBrowser(url: string, language: OAuthLanguage = 'en', write: OAuthWr
   child.unref();
 }
 
+/**
+ * Unofficial: sends the official Codex CLI's originator value so the ChatGPT
+ * authorize endpoint accepts the request. This is not a supported OpenAI API,
+ * and OpenAI can change or reject it without notice, which would break account
+ * login. API-key mode does not depend on it.
+ */
 export function addCodexOriginator(rawUrl: string): string {
   const url = new URL(rawUrl);
   url.searchParams.set('originator', 'codex_cli_rs');
