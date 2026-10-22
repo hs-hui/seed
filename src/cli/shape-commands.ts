@@ -5,6 +5,7 @@ import { t, currentLanguage } from '../i18n/index.js';
 import type { SeedStore } from '../storage/store.js';
 import { addConversation } from '../core/seed-manager.js';
 import { branchSuggestions, createBranch, pruneItem, pruneSuggestions } from '../core/branch.js';
+import { latestSuggestions, saveSuggestions } from '../core/suggestions.js';
 import type { CommonOptions } from './config-commands.js';
 
 export function registerShapeCommands(program: Command, deps: {
@@ -25,16 +26,17 @@ export function registerShapeCommands(program: Command, deps: {
       return;
     }
     if (selection) {
-      const suggestions = await branchSuggestions(seed, options.provider, options.model, currentLanguage()); const index = Number(selection) - 1;
+      const shown = await latestSuggestions<{ name: string; summary: string }>(store, seed.id, 'branch');
+      const suggestions = shown ?? await branchSuggestions(seed, options.provider, options.model, currentLanguage()); const index = Number(selection) - 1;
       const selected = Number.isInteger(index) && index >= 0 ? suggestions[index] : suggestions.find((s) => s.name.toLowerCase() === selection.toLowerCase());
       if (!selected) throw new Error('branch-selection-not-found');
-      // Invalid selections must not append AI suggestions to history.
-      for (const suggestion of suggestions) await addConversation(store, { seedId: seed.id, role: 'assistant', type: 'insight', content: `${suggestion.name}: ${suggestion.summary}`, metadata: { source: 'branch' } });
+      // Invalid selections must not append AI suggestions to history; a list that was never shown is saved only once it resolves.
+      if (!shown) await saveSuggestions(store, seed.id, 'branch', suggestions);
       const created = await createBranch(store, seed, selected.name, selected.summary, options.provider);
       print(options.json ? created : t('branch.created', { name: created.name }), Boolean(options.json)); return;
     }
     const suggestions = await branchSuggestions(seed, options.provider, options.model, currentLanguage());
-    for (const suggestion of suggestions) await addConversation(store, { seedId: seed.id, role: 'assistant', type: 'insight', content: `${suggestion.name}: ${suggestion.summary}`, metadata: { source: 'branch' } });
+    await saveSuggestions(store, seed.id, 'branch', suggestions);
     if (options.json || !process.stdin.isTTY || options.input === false) { print({ suggestions }, Boolean(options.json)); return; }
     console.log(t('branch.title'));
     const selected = await select({ message: t('branch.select', { count: suggestions.length }), choices: suggestions.map((s, i) => ({ name: `${i + 1}. ${s.name} — ${s.summary}`, value: i })) });
