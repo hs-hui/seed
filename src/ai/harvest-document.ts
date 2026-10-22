@@ -93,7 +93,7 @@ export async function generateHarvestDocument(seed: SeedState, type: HarvestType
   const provider = options.provider ?? await getProvider(options.providerId, options.model, language, { maxTokens: 8192 });
   const sections = documentSections[type];
   const response = await provider.chat([
-    { role: 'system', content: `${groundingRules}\nWrite a ${type} document in ${language === 'ko' ? 'Korean' : 'English'}. Return JSON only. Develop detailed prose, not merely copied answer lists. Every claim needs exact verbatim quotes from evidence.text and their source IDs. Use unique c1, c2, ... IDs. Each allowed section must contain claims OR be listed in missing. No other keys. Schema: {"claims":[{"id":"c1","section":"overview","text":"Supported paragraph","evidence":[{"sourceId":"idea","quote":"exact source words"}]}],"missing":["section-id"]}.` },
+    { role: 'system', content: `${groundingRules}\nWrite ${/^[aeiou]/.test(type) ? 'an' : 'a'} ${type} document in ${language === 'ko' ? 'Korean' : 'English'}. Return JSON only. Develop detailed prose, not merely copied answer lists. Every claim needs exact verbatim quotes from evidence.text and their source IDs. Use unique c1, c2, ... IDs. Each allowed section must contain claims OR be listed in missing. No other keys. Schema: {"claims":[{"id":"c1","section":"overview","text":"Supported paragraph","evidence":[{"sourceId":"idea","quote":"exact source words"}]}],"missing":["section-id"]}.` },
     { role: 'user', content: `HARVEST_DOCUMENT\n${JSON.stringify({ type, sections: sections.map((entry) => entry.id), input })}` },
   ]);
   const doc = validateDocument(response, input, type);
