@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 import { Command } from 'commander';
 import { input, select } from '@inquirer/prompts';
 import chalk from 'chalk';
@@ -161,7 +161,7 @@ async function targetStore(selector?: string): Promise<SeedStore> {
     // one project. JSON/non-interactive callers keep the nearest project as
     // a deterministic default and can opt into another with --seed.
     if (process.stdin.isTTY && !hasFlag('--json') && !process.argv.includes('--no-input')) {
-      const selected = await select({ message: t('garden.choose'), choices: entries.map((entry) => ({ name: `${entry.seed.name} (${entry.seed.maturity}%) ??${statusLabel(entry.seed.status)}`, value: entry.path })) });
+      const selected = await select({ message: t('garden.choose'), choices: entries.map((entry) => ({ name: `${entry.seed.name} (${entry.seed.maturity}%) — ${statusLabel(entry.seed.status)}`, value: entry.path })) });
       return new SeedStore(selected);
     }
     return current;
