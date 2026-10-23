@@ -4,7 +4,7 @@ import { currentLanguage, t } from '../i18n/index.js';
 import type { SeedStore } from '../storage/store.js';
 import { evaluateMaturity } from '../ai/provider.js';
 import { calculateMaturity, statusForMaturity } from '../core/maturity.js';
-import { addEvent } from '../core/seed-manager.js';
+import { addEvent, nextStatus } from '../core/seed-manager.js';
 import { withKeyedLock } from '../utils/fs.js';
 import path from 'node:path';
 import type { CommonOptions } from './config-commands.js';
@@ -26,7 +26,7 @@ export function registerBloomCommand(program: Command, deps: {
       const current: SeedState = { ...latest, maturityDimensions: dimensions, maturity: 0 };
       current.maturity = calculateMaturity(current);
       // A bloom review after harvest must not reopen a completed seed.
-      current.status = latest.status === 'harvested' ? 'harvested' : statusForMaturity(current.maturity);
+      current.status = nextStatus(latest.status, statusForMaturity(current.maturity));
       await store.save(current); await addEvent(store, current, 'bloom', `Bloom check: ${current.maturity}%`);
       return current;
     });

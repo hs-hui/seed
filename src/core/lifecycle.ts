@@ -1,6 +1,6 @@
 import { SeedState, now } from '../domain.js';
 import { SeedStore } from '../storage/store.js';
-import { addEvent } from './seed-manager.js';
+import { addEvent, nextStatus } from './seed-manager.js';
 import { statusForMaturity } from './maturity.js';
 import path from 'node:path';
 import { withKeyedLock } from '../utils/fs.js';
@@ -9,8 +9,7 @@ function statusAfterRestore(seed: SeedState): SeedState['status'] {
   // Restoring a pruned item must not silently roll a previously harvested
   // seed back into a growth phase. Dormant state is likewise preserved until
   // the explicit wake command.
-  if (seed.status === 'dormant' || seed.status === 'harvested') return seed.status;
-  return statusForMaturity(seed.maturity);
+  return nextStatus(seed.status, statusForMaturity(seed.maturity));
 }
 
 function removePruneNotes(coreIdea: string, labels: string[]): string {
@@ -28,7 +27,7 @@ function removePruneNotes(coreIdea: string, labels: string[]): string {
   return cleaned.trim();
 }
 
-async function witherUnlocked(store: SeedStore, seed: SeedState): Promise<SeedState> {
+async function witherUnlocked(store: SeedStore): Promise<SeedState> {
   const current = await store.load();
   if (current.status === 'dormant') return current;
   const updated: SeedState = { ...current, status: 'dormant', preDormantStatus: current.status, updatedAt: now() };
@@ -36,11 +35,12 @@ async function witherUnlocked(store: SeedStore, seed: SeedState): Promise<SeedSt
   return updated;
 }
 
-export async function wither(store: SeedStore, seed: SeedState): Promise<SeedState> {
-  return withKeyedLock(path.join(store.base, 'seed.json'), () => witherUnlocked(store, seed));
+// Unused: the stored state is authoritative and is reloaded under the lock.
+export async function wither(store: SeedStore, _seed: SeedState): Promise<SeedState> {
+  return withKeyedLock(path.join(store.base, 'seed.json'), () => witherUnlocked(store));
 }
 
-async function wakeUnlocked(store: SeedStore, seed: SeedState): Promise<SeedState> {
+async function wakeUnlocked(store: SeedStore): Promise<SeedState> {
   const current = await store.load();
   if (current.status !== 'dormant') return current;
   const previous = current.preDormantStatus && current.preDormantStatus !== 'dormant' ? current.preDormantStatus : 'growing';
@@ -50,11 +50,12 @@ async function wakeUnlocked(store: SeedStore, seed: SeedState): Promise<SeedStat
   return updated;
 }
 
-export async function wake(store: SeedStore, seed: SeedState): Promise<SeedState> {
-  return withKeyedLock(path.join(store.base, 'seed.json'), () => wakeUnlocked(store, seed));
+// Unused: the stored state is authoritative and is reloaded under the lock.
+export async function wake(store: SeedStore, _seed: SeedState): Promise<SeedState> {
+  return withKeyedLock(path.join(store.base, 'seed.json'), () => wakeUnlocked(store));
 }
 
-async function restoreItemUnlocked(store: SeedStore, seed: SeedState, item: string): Promise<SeedState> {
+async function restoreItemUnlocked(store: SeedStore, item: string): Promise<SeedState> {
   const currentSeed = await store.load();
   const branches = await store.branches(currentSeed.id);
   const requestedItem = item.trim();
@@ -94,6 +95,7 @@ async function restoreItemUnlocked(store: SeedStore, seed: SeedState, item: stri
   await store.save(updated); await addEvent(store, updated, 'restore', `Restored item: ${storedItem}`); return updated;
 }
 
-export async function restoreItem(store: SeedStore, seed: SeedState, item: string): Promise<SeedState> {
-  return withKeyedLock(path.join(store.base, 'seed.json'), () => restoreItemUnlocked(store, seed, item));
+// Unused: the stored state is authoritative and is reloaded under the lock.
+export async function restoreItem(store: SeedStore, _seed: SeedState, item: string): Promise<SeedState> {
+  return withKeyedLock(path.join(store.base, 'seed.json'), () => restoreItemUnlocked(store, item));
 }

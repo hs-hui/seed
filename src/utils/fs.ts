@@ -73,9 +73,9 @@ export async function withKeyedLock<T>(filePath: string, action: () => Promise<T
   finally { if (mutationQueues.get(key) === operation) mutationQueues.delete(key); }
 }
 export async function atomicWrite(filePath: string, content: string): Promise<void> {
-  // Serialize replacements for the same path. On Windows, removing the old
-  // file just before rename is not safe when two async callers overlap: one
-  // caller can remove the target while the other is in the rename syscall.
+  // Serialize replacements for the same path. Removing the target before
+  // rename would leave a window where another process sees no seed file and
+  // recovers an older backup; rename replaces the target on every platform.
   const key = queueKey(filePath);
   const previous = writeQueues.get(key) ?? Promise.resolve();
   const operation = previous.catch(() => undefined).then(async () => {
@@ -86,8 +86,16 @@ export async function atomicWrite(filePath: string, content: string): Promise<vo
     const tmp = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
     try {
       await writeFile(tmp, content, 'utf8');
-      if (process.platform === 'win32') await rm(filePath, { force: true });
-      await rename(tmp, filePath);
+      // Windows reports EPERM/EACCES while another process holds the target
+      // open; a short bounded retry rides out that sharing window.
+      for (let attempt = 0; ; attempt++) {
+        try { await rename(tmp, filePath); break; }
+        catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (process.platform !== 'win32' || (code !== 'EPERM' && code !== 'EACCES') || attempt >= 20) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+      }
     } finally {
       await rm(tmp, { force: true });
     }
@@ -114,9 +122,12 @@ export async function appendJsonLine(filePath: string, value: unknown): Promise<
 export async function backup(filePath: string, backupPath: string): Promise<void> {
   if (await exists(filePath)) { await ensureDir(path.dirname(backupPath)); await copyFile(filePath, backupPath); }
 }
-export async function listFiles(dir: string): Promise<string[]> {
+/** Lists record files by extension; pass '' to list every file. Staging files (*.tmp) are never records. */
+export async function listFiles(dir: string, extension = '.json'): Promise<string[]> {
   if (!(await exists(dir))) return [];
-  return (await readdir(dir, { withFileTypes: true })).filter((entry) => entry.isFile()).map((entry) => path.join(dir, entry.name));
+  return (await readdir(dir, { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && entry.name.endsWith(extension) && !entry.name.endsWith('.tmp'))
+    .map((entry) => path.join(dir, entry.name));
 }
 export async function ensureLine(filePath: string, line: string): Promise<void> {
   const key = queueKey(filePath);

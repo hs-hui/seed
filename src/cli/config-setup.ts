@@ -1,8 +1,9 @@
 import { input, select } from '@inquirer/prompts';
 import { currentLanguage, t } from '../i18n/index.js';
-import { loadConfig, saveConfig, saveProjectConfig, type GlobalConfig, type ProviderConfig } from '../storage/store.js';
+import { loadConfig, loadGlobalConfig, migrateLegacyOAuthModel, projectConfigPath, saveConfig, saveProjectConfig, type GlobalConfig, type ProviderConfig } from '../storage/store.js';
 import { DEFAULT_OPENAI_MODEL, DEFAULT_OPENAI_OAUTH_MODEL, providerKey, testProviderConnection } from '../ai/provider.js';
 import { getOpenAIToken, loginOpenAI } from '../ai/openai-oauth.js';
+import { PROVIDER_DEFAULT_MODELS } from '../ai/defaults.js';
 
 export function credentialEnvName(provider: ProviderConfig): string {
   if (provider.type === 'openai') return 'OPENAI_API_KEY';
@@ -20,10 +21,21 @@ export async function configuredCredential(provider: ProviderConfig): Promise<st
   if (provider.type === 'openai' && provider.connectionMode === 'oauth') return getOpenAIToken();
   return providerKey(provider);
 }
-/** Persist settings locally when running inside a Seed project. */
+/**
+ * Persist settings. Inside a Seed project only the language and the provider
+ * choice stay local; provider definitions decide where API keys are sent, so
+ * they always go to the user-owned global config.
+ */
 export async function persistConfig(config: GlobalConfig): Promise<void> {
-  const savedToProject = await saveProjectConfig(config);
-  if (!savedToProject) await saveConfig(config);
+  if (!(await projectConfigPath())) { await saveConfig(config); return; }
+  const global = await loadGlobalConfig();
+  // A first setup run inside a project still needs usable global defaults:
+  // setupCompleted is saved globally, so later runs elsewhere will not ask
+  // for the language again and must not silently fall back to English.
+  const keepActive = config.providers.some((provider) => provider.id === global.activeProvider && provider.enabled !== false);
+  await saveConfig({ ...global, version: config.version, setupCompleted: config.setupCompleted, providers: config.providers,
+    activeProvider: keepActive ? global.activeProvider : config.activeProvider, lang: global.lang ?? config.lang });
+  await saveProjectConfig(config);
 }
 
 export async function configWizard(): Promise<void> {
@@ -40,9 +52,9 @@ export async function configWizard(): Promise<void> {
   if (selected === 'openai-oauth') {
     console.log(t('config.oauthExperimental'));
     const configuredModel = process.env.SEED_OPENAI_OAUTH_MODEL?.trim();
-    const defaultOAuthModel = configuredModel === 'gpt-5.3-codex' ? DEFAULT_OPENAI_OAUTH_MODEL : configuredModel || DEFAULT_OPENAI_OAUTH_MODEL;
+    const defaultOAuthModel = migrateLegacyOAuthModel(configuredModel || DEFAULT_OPENAI_OAUTH_MODEL);
     const enteredModel = (await input({ message: t('config.model'), default: defaultOAuthModel })).trim();
-    const oauthModel = enteredModel === 'gpt-5.3-codex' ? DEFAULT_OPENAI_OAUTH_MODEL : enteredModel || defaultOAuthModel;
+    const oauthModel = migrateLegacyOAuthModel(enteredModel || defaultOAuthModel);
     await loginOpenAI(currentLanguage());
     const existing = current.providers.find((provider) => provider.id === 'openai');
     const oauthProvider = {
@@ -60,7 +72,7 @@ export async function configWizard(): Promise<void> {
   const id = selected === 'custom' ? (await input({ message: t('config.providerId'), default: 'custom-1' })).trim() || 'custom-1' : selected;
   const baseUrl = selected === 'custom' ? (await input({ message: t('config.baseUrl') })).trim() : undefined;
   if (selected === 'custom' && !baseUrl) { console.log(t('config.baseUrlRequired')); return; }
-  const modelDefaults: Record<string, string> = { openai: DEFAULT_OPENAI_MODEL, gemini: 'gemini-2.5-flash', anthropic: 'claude-3-5-sonnet-latest' };
+  const modelDefaults: Record<string, string> = { openai: DEFAULT_OPENAI_MODEL, ...PROVIDER_DEFAULT_MODELS };
   const enteredModel = (await input({ message: t('config.model'), ...(modelDefaults[selected] ? { default: modelDefaults[selected] } : {}) })).trim();
   if (selected === 'custom' && !enteredModel) { console.log(t('config.modelRequired')); return; }
   const defaultModel = enteredModel || modelDefaults[selected] || 'default';

@@ -295,7 +295,7 @@ describe('Seed MVP flow', () => {
       const store = new SeedStore(root); const seed = await plant(store, 'A small idea');
       const mature = { ...seed, maturity: 80, status: 'blooming' as const, maturityDimensions: seed.maturityDimensions.map((dimension) => ({ ...dimension, score: 80 })) };
       await store.save(mature);
-      const result = await recordDecision(store, mature, 'Keep one workflow in v1', 'The core loop should be validated first');
+      const result = await recordDecision(store, 'Keep one workflow in v1', 'The core loop should be validated first');
       expect(result.decision.confirmedByUser).toBe(true);
       expect(result.decision.source).toBe('user');
       expect(result.seed.decisions).toHaveLength(1);
@@ -311,7 +311,7 @@ describe('Seed MVP flow', () => {
       const store = new SeedStore(root); const seed = await plant(store, 'A branching idea');
       const branch = await createBranch(store, seed, 'Focused path', 'A focused path');
       const before = await store.load();
-      const result = await recordDecision(store, before, 'Keep the focused path', 'Validate the smallest loop first', branch.id);
+      const result = await recordDecision(store, 'Keep the focused path', 'Validate the smallest loop first', branch.id);
       const parent = await store.load(); const savedBranch = (await store.branches(seed.id)).find((item) => item.id === branch.id)!;
       expect(result.seed.decisions).toHaveLength(0);
       expect(parent.decisions).toHaveLength(0);
@@ -326,8 +326,8 @@ describe('Seed MVP flow', () => {
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A decision race idea');
       const results = await Promise.all([
-        recordDecision(store, seed, 'Keep the first step small', 'It is easier to try'),
-        recordDecision(store, seed, 'Ask one question at a time', 'It is easier to answer'),
+        recordDecision(store, 'Keep the first step small', 'It is easier to try'),
+        recordDecision(store, 'Ask one question at a time', 'It is easier to answer'),
       ]);
       expect(results).toHaveLength(2);
       expect((await store.load()).decisions.map((decision) => decision.decision)).toEqual(expect.arrayContaining(['Keep the first step small', 'Ask one question at a time']));
@@ -544,7 +544,7 @@ describe('Seed MVP flow', () => {
       const store = new SeedStore(root); const planted = await plant(store, 'Shared grocery list for roommates');
       await store.save({ ...planted, constraints: ['Must work offline on mobile'], goals: ['Roommates see purchases in real-time'] });
       await addConversation(store, { seedId: planted.id, role: 'user', type: 'answer', content: 'We want a React Native app with Supabase for sync' });
-      await recordDecision(store, await store.load(), 'Ship to the App Store first', 'iOS users dominate our group');
+      await recordDecision(store, 'Ship to the App Store first', 'iOS users dominate our group');
       const { readFile } = await import('node:fs/promises');
       const trd = await readFile(await harvest(store, await store.load(), 'trd', 'en') as string, 'utf8');
       expect(trd).toContain('- Mobile — constraint: "Must work offline on mobile"');
@@ -566,7 +566,7 @@ describe('Seed MVP flow', () => {
       const store = new SeedStore(root); const seed = await plant(store, 'A focused workflow');
       const branch = await createBranch(store, seed, 'Repository tour', 'Help a new developer orient quickly');
       await store.saveResearch({ id: 'research-1', seedId: seed.id, source: 'https://example.com', title: 'User interview', summary: 'Developers need a faster first step.', relevance: 'high', retrievedAt: new Date().toISOString(), isVerified: true, isEstimate: false });
-      await recordDecision(store, await store.load(), 'Use a CLI-first workflow', 'Validate the smallest loop before adding surfaces');
+      await recordDecision(store, 'Use a CLI-first workflow', 'Validate the smallest loop before adding surfaces');
       const file = await harvest(store, { ...(await store.load()), goals: ['Reach the first useful result'], constraints: ['One workflow only'], users: ['New developers'] }, 'prd', 'en');
       const { readFile } = await import('node:fs/promises'); const document = await readFile(file as string, 'utf8');
       expect(document).toContain('Repository tour: Help a new developer orient quickly');
@@ -652,7 +652,7 @@ describe('Seed MVP flow', () => {
       const pruned = await pruneItem(store, await store.load(), branch.id, 'en');
       await expect(askGrowthQuestion(store, pruned, 'openai', branch.id)).rejects.toThrow('branch-not-active');
       await expect(applyGrowth(store, pruned, 'An answer', 'openai', branch.id)).rejects.toThrow('branch-not-active');
-      await expect(recordDecision(store, pruned, 'Keep the branch', 'Not yet', branch.id)).rejects.toThrow('branch-not-active');
+      await expect(recordDecision(store, 'Keep the branch', 'Not yet', branch.id)).rejects.toThrow('branch-not-active');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
@@ -758,7 +758,7 @@ describe('Seed MVP flow', () => {
       expect((await store.branches(seed.id)).find((item) => item.id === branch.id)?.status).toBe('active');
       const question = await askGrowthQuestion(store, await store.load(), 'openai', branch.id.toUpperCase());
       expect(question).toBeTruthy();
-      const decision = await recordDecision(store, await store.load(), 'Keep this direction', 'It is focused', branch.id.toUpperCase());
+      const decision = await recordDecision(store, 'Keep this direction', 'It is focused', branch.id.toUpperCase());
       expect(decision.decision.branchId).toBe(branch.id);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
@@ -782,7 +782,7 @@ describe('Seed MVP flow', () => {
       const store = new SeedStore(root); const seed = await plant(store, 'A dormant idea'); const dormant = await wither(store, seed);
       await expect(applyGrowth(store, dormant, 'An answer', 'openai')).rejects.toThrow('seed-dormant');
       await expect(createBranch(store, dormant, 'Blocked path', 'Should not mutate dormancy')).rejects.toThrow('seed-dormant');
-      await expect(recordDecision(store, dormant, 'Blocked decision')).rejects.toThrow('seed-dormant');
+      await expect(recordDecision(store, 'Blocked decision')).rejects.toThrow('seed-dormant');
       const evaluation = await evaluateMaturity(dormant, 'openai'); const stillDormant = { ...dormant, maturityDimensions: evaluation.dimensions, maturity: calculateMaturity({ ...dormant, maturityDimensions: evaluation.dimensions }), status: 'dormant' as const };
       await store.save(stillDormant); expect((await store.load()).status).toBe('dormant');
     } finally { await rm(root, { recursive: true, force: true }); }

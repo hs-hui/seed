@@ -6,7 +6,7 @@ import { currentLanguage, t } from '../i18n/index.js';
 import type { SeedStore } from '../storage/store.js';
 import { dimensionsFor, sunlightAnalysis } from '../ai/provider.js';
 import { calculateMaturity } from '../core/maturity.js';
-import { addEvent } from '../core/seed-manager.js';
+import { addEvent, nextStatus } from '../core/seed-manager.js';
 import { webSources } from '../core/sunlight.js';
 import { withKeyedLock } from '../utils/fs.js';
 import path from 'node:path';
@@ -39,7 +39,7 @@ export function registerSunlightCommand(program: Command, deps: {
       for (const entry of researchEntries) await store.saveResearch(entry);
       const newAssumptions = analysis.assumptions.filter((assumption) => !latest.assumptions.includes(assumption));
       const newQuestions = analysis.openQuestions.filter((question) => !latest.openQuestions.some((existing) => existing.question === question)).map((question) => ({ id: randomUUID(), seedId: latest.id, question, focus: 'validation' as const, importance: 'high' as const, status: 'open' as const, createdAt: now() }));
-      const updated: SeedState = { ...latest, assumptions: [...latest.assumptions, ...newAssumptions], openQuestions: [...latest.openQuestions, ...newQuestions], status: latest.status === 'harvested' ? 'harvested' : 'evaluating', updatedAt: now() };
+      const updated: SeedState = { ...latest, assumptions: [...latest.assumptions, ...newAssumptions], openQuestions: [...latest.openQuestions, ...newQuestions], status: nextStatus(latest.status, 'evaluating'), updatedAt: now() };
       updated.maturityDimensions = dimensionsFor(updated, undefined, 0, currentLanguage());
       updated.maturity = calculateMaturity(updated); await store.save(updated); await addEvent(store, updated, 'sunlight', 'Sunlight reality check completed', { web: Boolean(options.web), researchCount: researchEntries.length });
       return { areas: analysis.areas, assumptions: analysis.assumptions, openQuestions: analysis.openQuestions, sources, maturity: updated.maturity, research: researchEntries };

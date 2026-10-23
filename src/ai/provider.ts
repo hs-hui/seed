@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { Branch, ConversationEntry, GrowthFocus, ResearchEntry, SeedState, growthFocuses } from '../domain.js';
 export { dimensionsFor } from '../domain/maturity-dimensions.js';
 import { buildContext } from './context-builder.js';
@@ -33,14 +34,6 @@ function isSimpleAcknowledgement(value: string): boolean {
 }
 
 /**
- * Keep a conservative intent safety net alongside the model classifier. This
- * prevents callers that use `classifyGrowthInput` directly from storing an
- * obvious help request as product content while preserving normal answers.
- */
-function localGrowthInputIntent(value: string): GrowthInputIntent {
-  return detectGrowthInputIntent(value);
-}
-/**
  * UI language and idea language are intentionally separate. English is the
  * CLI default, but a Korean idea should still receive Korean AI content when
  * the user did not add an explicit language flag.
@@ -66,10 +59,13 @@ export function inferProviderLanguage(preferred: ProviderLanguage, texts: string
 
 
 /**
- * Let a configured model catch conversational intent that cannot be safely
- * enumerated with keyword rules (for example, “I am not sure what you want
- * from me”). Deterministic callers still handle explicit controls first, and
- * a provider failure falls back to the same conservative local safety net.
+ * Explicit controls ("skip", "모르겠어요", "later") are settled locally without
+ * a provider call. Everything else goes to the configured model, which also
+ * sees the question: an ordinary answer can start like a control ("Later in
+ * the evening…", "예를 들어…"), and a help request such as “I am not sure what
+ * you want from me” cannot be enumerated. Output that names no intent keeps
+ * the reply as an answer; a provider failure throws instead of being guessed
+ * at locally.
  */
 export async function classifyGrowthInput(
   answer: string,
@@ -80,16 +76,16 @@ export async function classifyGrowthInput(
 ): Promise<GrowthInputIntent> {
   if (!answer.trim()) return 'pause';
   if (isSimpleAcknowledgement(answer)) return 'answer';
+  const explicitIntent = detectGrowthInputIntent(answer);
+  if (explicitIntent !== 'answer') return explicitIntent;
   const contentLanguage = inferProviderLanguage(language, [answer]);
-  const safetyIntent = localGrowthInputIntent(answer);
   const provider = await getProvider(providerId, model, contentLanguage);
-  const response = await provider.ask(growthIntentPrompt(question, answer));
-  const modelIntent = normalizeGrowthInputIntent(response);
-  // A model may over-trust a short phrase as idea content. Never let that
-  // override a deterministic, obvious request to simplify or change the
-  // question; otherwise a beginner's help request would pollute the idea.
-  if (safetyIntent !== 'answer' && modelIntent === 'answer') return safetyIntent;
-  return modelIntent ?? safetyIntent;
+  return normalizeGrowthInputIntent(await provider.ask(growthIntentPrompt(question, answer))) ?? 'answer';
+}
+
+/** The user's own words, so a term they typed is not flagged as model jargon. */
+function userAuthoredText(seed: SeedState, conversation: ConversationEntry[] = [], ...extra: string[]): string {
+  return [seed.originalIdea, seed.coreIdea, seed.problem, ...seed.users, ...seed.goals, ...seed.constraints, ...conversation.filter((entry) => entry.role === 'user').map((entry) => entry.content), ...extra].join(' ');
 }
 
 function requiredGrowthFocus(seed: SeedState): GrowthFocus {
@@ -134,12 +130,14 @@ export async function nextQuestion(seed: SeedState, providerId?: string, model?:
     const parsedDelta = typeof parsed.maturityDelta === 'number' ? parsed.maturityDelta : Number(parsed.maturityDelta);
     const delta = Number.isFinite(parsedDelta) ? parsedDelta : 3;
     const focus = typeof parsed.focus === 'string' && growthFocuses.includes(parsed.focus as GrowthFocus) ? parsed.focus as GrowthFocus : undefined;
-    if (focus !== required) {
+    // An omitted focus is not a mismatch: keep the valid AI question and label
+    // it with the required focus, which is what the caller expects.
+    if (focus && focus !== required) {
       return { question: unusedSafeQuestion(contentLanguage, required, allSeenQuestions), maturityDelta: 3, focus: required };
     }
     const sanitized = sanitizeQuestion(parsed.question);
     const duplicate = allSeenQuestions.map((item) => sanitizeQuestion(item).toLocaleLowerCase()).filter(Boolean).includes(sanitized.toLocaleLowerCase());
-    if (duplicate || containsBeginnerJargon(sanitized, contentLanguage) || isTooComplexQuestion(sanitized, contentLanguage)) {
+    if (duplicate || containsBeginnerJargon(sanitized, contentLanguage, userAuthoredText(seed, recentConversation)) || isTooComplexQuestion(sanitized, contentLanguage)) {
       // A model can repeat an already answered question despite the context
       // instruction or expose internal product jargon despite the prompt.
       // Ask a deterministic, unused, beginner-safe question instead of
@@ -161,7 +159,7 @@ export async function growthUpdate(seed: SeedState, answer: string, providerId?:
   const context = buildContext(seed, 'grow.update', recentConversation, currentBranch, contextExtras);
   const prompt = growthUpdatePrompt(seed, context, answer);
   const response = await askConversational(provider, context.systemPrompt, context.recentConversation, prompt);
-  return withLocalContradictions(parseGrowthUpdate(response, seed.coreIdea, answer, contentLanguage), seed, answer, contentLanguage);
+  return withLocalContradictions(parseGrowthUpdate(response, seed.coreIdea, answer, contentLanguage, userAuthoredText(seed, recentConversation, answer)), seed, answer, contentLanguage);
 }
 
 /** Detect only explicit exclusive-scope conflicts; avoid guessing intent. */
@@ -185,16 +183,17 @@ function withLocalContradictions(update: GrowthUpdate, seed: SeedState, answer: 
   return { ...update, contradictionsDetected: [...new Set([...update.contradictionsDetected, ...conflicts])].slice(0, 3) };
 }
 
-function parseGrowthUpdate(response: string, before: string, answer: string, language: ProviderLanguage): GrowthUpdate {
+function parseGrowthUpdate(response: string, before: string, answer: string, language: ProviderLanguage, userText = ''): GrowthUpdate {
   const parsed = parseJsonObject(response);
-  const rawSummary = typeof parsed?.updatedSummary === 'string' ? parsed.updatedSummary : parsed?.summary;
-  let updatedSummary = typeof rawSummary === 'string' && rawSummary.trim()
-    ? rawSummary.trim().slice(0, 240)
-    : `${before} — ${answer.trim()}`.slice(0, 240);
+  // Without a provider summary the caller would still raise maturity, so an
+  // empty or non-JSON reply must fail instead of being saved as a success.
+  const rawSummary = [parsed?.updatedSummary, parsed?.summary].find((value): value is string => typeof value === 'string' && Boolean(value.trim()));
+  if (!rawSummary) throw new Error('ai-response-invalid');
+  let updatedSummary = rawSummary.trim().slice(0, 240);
   // Keep generated reflections as approachable as generated questions. If a
   // provider leaks product jargon into the summary, fall back to the user's
   // own words instead of making them decode an internal planning label.
-  if (containsBeginnerJargon(updatedSummary, language)) {
+  if (containsBeginnerJargon(updatedSummary, language, userText)) {
     updatedSummary = `${before} — ${answer.trim()}`.slice(0, 240);
   }
   // A provider may return a polished but unrelated summary. Preserve the
@@ -210,9 +209,9 @@ function parseGrowthUpdate(response: string, before: string, answer: string, lan
   const fallbackReason = language === 'ko' ? '방금 답변을 아이디어에 반영했습니다.' : 'I reflected your answer in the idea.';
   return {
     updatedSummary,
-    questionReason: rawReason && !containsBeginnerJargon(rawReason, language) ? rawReason : fallbackReason,
-    contradictionsDetected: list(parsed?.contradictionsDetected).filter((item) => isBeginnerFriendlyFeedback(item, language)),
-    suggestions: list(parsed?.suggestions).filter((suggestion) => isBeginnerFriendlyFeedback(suggestion, language)),
+    questionReason: rawReason && !containsBeginnerJargon(rawReason, language, userText) ? rawReason : fallbackReason,
+    contradictionsDetected: list(parsed?.contradictionsDetected).filter((item) => isBeginnerFriendlyFeedback(item, language, userText)),
+    suggestions: list(parsed?.suggestions).filter((suggestion) => isBeginnerFriendlyFeedback(suggestion, language, userText)),
     // Keep the visible progress signal stable across providers. A valid but
     // overly conservative model response should not make a normal growth
     // turn look like it made no progress.
@@ -226,7 +225,7 @@ export async function waterPerspectives(seed: SeedState, providerId?: string, mo
   const response = await provider.ask(waterPerspectivesPrompt(seed));
   const parsed = parseJsonObject(response);
   const values = Array.isArray(parsed?.perspectives) ? parsed.perspectives.filter((item): item is { id?: unknown; name?: unknown; question?: unknown } => Boolean(item && typeof item === 'object')) : [];
-  const perspectives = values.filter((item) => typeof item.name === 'string' && typeof item.question === 'string').map((item, index) => ({ id: typeof item.id === 'string' && item.id ? item.id : `lens-${index + 1}`, name: item.name as string, question: sanitizeQuestion(item.question as string) })).filter((item) => item.question && !containsBeginnerJargon(`${item.name} ${item.question}`, contentLanguage) && !isTooComplexQuestion(item.question, contentLanguage)).slice(0, 8);
+  const perspectives = values.filter((item) => typeof item.name === 'string' && typeof item.question === 'string').map((item, index) => ({ id: typeof item.id === 'string' && item.id ? item.id : `lens-${index + 1}`, name: item.name as string, question: sanitizeQuestion(item.question as string) })).filter((item) => item.question && !containsBeginnerJargon(`${item.name} ${item.question}`, contentLanguage, userAuthoredText(seed)) && !isTooComplexQuestion(item.question, contentLanguage)).slice(0, 8);
   if (perspectives.length < 4) throw new Error('ai-response-invalid');
   return perspectives;
 }
@@ -244,9 +243,10 @@ export async function waterInsight(seed: SeedState, perspective: WaterPerspectiv
   const list = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())).map((item) => item.trim()).slice(0, 6) : [];
   const title = typeof parsed?.title === 'string' && parsed.title.trim() ? parsed.title.trim() : '';
   const summary = typeof parsed?.summary === 'string' && parsed.summary.trim() ? parsed.summary.trim() : '';
-  const points = list(parsed?.points).filter((point) => !containsBeginnerJargon(point, contentLanguage));
-  const assumptions = list(parsed?.assumptions).filter((assumption) => !containsBeginnerJargon(assumption, contentLanguage));
-  if (!title || !summary || containsBeginnerJargon(title, contentLanguage) || containsBeginnerJargon(summary, contentLanguage) || !points.length || !assumptions.length) {
+  const waterUserText = userAuthoredText(seed, [], userAnswer);
+  const points = list(parsed?.points).filter((point) => !containsBeginnerJargon(point, contentLanguage, waterUserText));
+  const assumptions = list(parsed?.assumptions).filter((assumption) => !containsBeginnerJargon(assumption, contentLanguage, waterUserText));
+  if (!title || !summary || containsBeginnerJargon(title, contentLanguage, waterUserText) || containsBeginnerJargon(summary, contentLanguage, waterUserText) || !points.length || !assumptions.length) {
     throw new Error('ai-response-invalid');
   }
   return { title, summary, points, assumptions };
@@ -259,10 +259,11 @@ export async function sunlightAnalysis(seed: SeedState, sources: SunlightSource[
   const response = await provider.ask(sunlightPrompt(seed, webContext));
   const parsed = parseJsonObject(response);
   const list = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())).map((item) => item.trim()).slice(0, 6) : [];
-  const areas = Array.isArray(parsed?.areas) ? parsed.areas.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object')).map((item) => ({ name: typeof item.name === 'string' ? item.name.trim() : '', findings: list(item.findings).filter((finding) => !containsBeginnerJargon(finding, contentLanguage)), facts: list(item.facts).filter((fact) => !containsBeginnerJargon(fact, contentLanguage)), estimates: list(item.estimates).filter((estimate) => !containsBeginnerJargon(estimate, contentLanguage)) })).filter((area) => area.name && !containsBeginnerJargon(area.name, contentLanguage) && (area.findings.length || area.facts.length || area.estimates.length)).slice(0, 8) : [];
+  const userText = userAuthoredText(seed);
+  const areas = Array.isArray(parsed?.areas) ? parsed.areas.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object')).map((item) => ({ name: typeof item.name === 'string' ? item.name.trim() : '', findings: list(item.findings).filter((finding) => !containsBeginnerJargon(finding, contentLanguage, userText)), facts: list(item.facts).filter((fact) => !containsBeginnerJargon(fact, contentLanguage, userText)), estimates: list(item.estimates).filter((estimate) => !containsBeginnerJargon(estimate, contentLanguage, userText)) })).filter((area) => area.name && !containsBeginnerJargon(area.name, contentLanguage, userText) && (area.findings.length || area.facts.length || area.estimates.length)).slice(0, 8) : [];
   if (areas.length < 3) throw new Error('ai-response-invalid');
-  const assumptions = list(parsed?.assumptions).filter((assumption) => !containsBeginnerJargon(assumption, contentLanguage));
-  const openQuestions = list(parsed?.openQuestions).map((question) => sanitizeQuestion(question)).filter((question) => question && !containsBeginnerJargon(question, contentLanguage) && !isTooComplexQuestion(question, contentLanguage));
+  const assumptions = list(parsed?.assumptions).filter((assumption) => !containsBeginnerJargon(assumption, contentLanguage, userText));
+  const openQuestions = list(parsed?.openQuestions).map((question) => sanitizeQuestion(question)).filter((question) => question && !containsBeginnerJargon(question, contentLanguage, userText) && !isTooComplexQuestion(question, contentLanguage));
   return { areas, assumptions, openQuestions };
 }
 
@@ -271,17 +272,29 @@ export async function evolutionSuggestions(seed: SeedState, providerId?: string,
   const provider = await getProvider(providerId, model, contentLanguage);
   const response = await provider.ask(evolutionPrompt(seed));
   const parsed = parseJsonObject(response);
-  const suggestions = Array.isArray(parsed?.suggestions) ? parsed.suggestions.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object')).map((item) => ({ name: typeof item.name === 'string' ? item.name.trim() : '', summary: typeof item.summary === 'string' ? item.summary.trim() : '' })).filter((item) => item.name && item.summary && !containsBeginnerJargon(`${item.name} ${item.summary}`, contentLanguage)).slice(0, 4) : [];
+  const suggestions = Array.isArray(parsed?.suggestions) ? parsed.suggestions.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object')).map((item) => ({ name: typeof item.name === 'string' ? item.name.trim() : '', summary: typeof item.summary === 'string' ? item.summary.trim() : '' })).filter((item) => item.name && item.summary && !containsBeginnerJargon(`${item.name} ${item.summary}`, contentLanguage, userAuthoredText(seed))).slice(0, 4) : [];
   if (suggestions.length < 2) throw new Error('ai-response-invalid');
   return suggestions;
+}
+
+// The top-level reply shape is strict (a wrong `branches`/`items` type is an
+// invalid provider reply), but a single malformed entry is dropped so one bad
+// item does not discard the valid suggestions around it.
+const branchReply = z.object({ branches: z.array(z.unknown()) });
+const branchItem = z.object({ name: z.string(), summary: z.string() });
+const pruneReply = z.object({ items: z.array(z.unknown()) });
+const pruneItem = z.object({ item: z.string(), reason: z.string() });
+function validItems<T extends z.ZodTypeAny>(items: unknown[], schema: T): Array<z.infer<T>> {
+  return items.flatMap((item) => { const result = schema.safeParse(item); return result.success ? [result.data] : []; });
 }
 
 export async function suggestBranches(seed: SeedState, providerId?: string, model?: string, language: ProviderLanguage = 'en'): Promise<Array<{ name: string; summary: string }>> {
   const contentLanguage = inferProviderLanguage(language, [seed.originalIdea, seed.coreIdea, seed.problem, ...seed.users, ...seed.goals]);
   const provider = await getProvider(providerId, model, contentLanguage);
   const response = await provider.ask(branchPrompt(seed));
-  const parsed = parseJsonObject(response) as { branches?: Array<{ name: string; summary: string }> } | undefined;
-  const branches = (parsed?.branches ?? []).filter((branch) => branch?.name && branch?.summary && !containsBeginnerJargon(`${branch.name} ${branch.summary}`, contentLanguage)).slice(0, 4);
+  const reply = branchReply.safeParse(parseJsonObject(response));
+  if (!reply.success) throw new Error('ai-response-invalid');
+  const branches = validItems(reply.data.branches, branchItem).filter((branch) => branch.name && branch.summary && !containsBeginnerJargon(`${branch.name} ${branch.summary}`, contentLanguage, userAuthoredText(seed))).slice(0, 4);
   if (branches.length < 2) throw new Error('ai-response-invalid');
   return branches;
 }
@@ -290,8 +303,9 @@ export async function suggestPrune(seed: SeedState, providerId?: string, model?:
   const contentLanguage = inferProviderLanguage(language, [seed.originalIdea, seed.coreIdea, seed.problem, ...seed.users, ...seed.goals]);
   const provider = await getProvider(providerId, model, contentLanguage);
   const response = await provider.ask(prunePrompt(seed));
-  const parsed = parseJsonObject(response) as { items?: Array<{ item: string; reason: string }> } | undefined;
-  const items = (parsed?.items ?? []).filter((item) => item?.item && item?.reason && !containsBeginnerJargon(`${item.item} ${item.reason}`, contentLanguage));
+  const reply = pruneReply.safeParse(parseJsonObject(response));
+  if (!reply.success) throw new Error('ai-response-invalid');
+  const items = validItems(reply.data.items, pruneItem).filter((item) => item.item && item.reason && !containsBeginnerJargon(`${item.item} ${item.reason}`, contentLanguage, userAuthoredText(seed)));
   return items;
 }
 
@@ -306,7 +320,7 @@ export async function evaluateMaturity(seed: SeedState, providerId?: string, mod
   const dimensions = seed.maturityDimensions.map((dimension) => {
     const candidate = rawDimensions.find((item) => item && typeof item === 'object' && canonicalMaturityDimension((item as { name?: unknown }).name) === canonicalMaturityDimension(dimension.name)) as { score?: unknown; reason?: unknown } | undefined;
     const score = Number(candidate?.score);
-    const reason = typeof candidate?.reason === 'string' && candidate.reason.trim() && !containsBeginnerJargon(candidate.reason, contentLanguage)
+    const reason = typeof candidate?.reason === 'string' && candidate.reason.trim() && !containsBeginnerJargon(candidate.reason, contentLanguage, userAuthoredText(seed))
       ? candidate.reason.trim() : dimension.reason;
     return candidate && Number.isFinite(score)
       ? { ...dimension, score: Math.max(0, Math.min(100, Math.round(score))), reason }
@@ -316,7 +330,7 @@ export async function evaluateMaturity(seed: SeedState, providerId?: string, mod
   // only canonical names so a provider's explanatory sentence cannot leak
   // into a localized recommendation as an untranslated label.
   const listDimensions = (value: unknown): string[] => Array.isArray(value) ? value.map((item) => canonicalMaturityDimension(item)).filter((item): item is string => Boolean(item)).slice(0, 5) : [];
-  const listExplore = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())).map((item) => canonicalMaturityDimension(item) ?? item.trim()).filter((item) => !containsBeginnerJargon(item, contentLanguage)).slice(0, 5) : [];
+  const listExplore = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())).map((item) => canonicalMaturityDimension(item) ?? item.trim()).filter((item) => !containsBeginnerJargon(item, contentLanguage, userAuthoredText(seed))).slice(0, 5) : [];
   const clear = listDimensions(parsed?.clear); const uncertain = listDimensions(parsed?.uncertain); const explore = listExplore(parsed?.explore);
   const open = seed.openQuestions.filter((question) => question.status === 'open').map((question) => question.question).slice(0, 3);
   return {

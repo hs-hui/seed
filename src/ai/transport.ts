@@ -1,4 +1,4 @@
-import { loadConfig, type ProviderConfig } from '../storage/store.js';
+import { loadConfig, migrateLegacyOAuthModel, type ProviderConfig } from '../storage/store.js';
 import { ensureOpenAIAuthFile, getOpenAIToken, openAIAuthFilePath } from './openai-oauth.js';
 import { createOpenAIOAuth } from '@openai-oauth/ai-sdk';
 import { openaiCredentials } from '@openai-oauth/local';
@@ -21,13 +21,22 @@ function timeoutMs(): number {
 function retryable(status: number): boolean { return status === 408 || status === 409 || status === 429 || status >= 500; }
 async function wait(ms: number): Promise<void> { await new Promise((resolve) => setTimeout(resolve, ms)); }
 
+/**
+ * Cancels the SDK request itself when the limit passes. Without it the
+ * promise race rejects but the HTTP call keeps running in the background.
+ */
+export function providerTimeoutSignal(): AbortSignal { return AbortSignal.timeout(timeoutMs()); }
+
 async function withProviderTimeout<T>(promise: Promise<T>, provider: string): Promise<T> {
   const limit = timeoutMs();
+  const timeout = () => new Error(`${provider} request timed out after ${limit}ms.`);
+  // The request's signal was created before this timer, so its abort fires first and surfaces as an abort error.
+  const aborted = (error: unknown): boolean => ['AbortError', 'TimeoutError'].includes((error as { name?: string } | null)?.name ?? '');
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await new Promise<T>((resolve, reject) => {
-      timer = setTimeout(() => reject(new Error(`${provider} request timed out after ${limit}ms.`)), limit);
-      promise.then(resolve, reject);
+      timer = setTimeout(() => reject(timeout()), limit);
+      promise.then(resolve, (error: unknown) => reject(aborted(error) ? timeout() : error));
     });
   } finally {
     if (timer) clearTimeout(timer);
@@ -84,6 +93,15 @@ function normalizeProviderTurns(messages: ProviderMessage[]): Array<{ role: 'use
   return turns;
 }
 
+/**
+ * The official OpenAI API rejects max_tokens for current models and requires
+ * max_completion_tokens, while OpenAI-compatible servers still expect the
+ * legacy name. Only the default endpoint gets the new field.
+ */
+function tokenLimitField(config: ProviderConfig, base: string, limit: number): Record<string, number> {
+  return config.type === 'openai' && base === 'https://api.openai.com/v1' ? { max_completion_tokens: limit } : { max_tokens: limit };
+}
+
 export class OpenAICompatibleProvider implements LLMProvider {
   constructor(public readonly config: ProviderConfig, private readonly apiKey: string, private readonly language: ProviderLanguage = 'en') {}
   get id(): string { return this.config.id; }
@@ -100,7 +118,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const data = await requestJson<{ choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }> }>(`${base}/chat/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({ model: this.config.defaultModel, ...(this.config.temperature !== undefined ? { temperature: this.config.temperature } : {}), ...(this.config.maxTokens ? { max_tokens: this.config.maxTokens } : {}), messages: [
+      body: JSON.stringify({ model: this.config.defaultModel, ...(this.config.temperature !== undefined ? { temperature: this.config.temperature } : {}), ...(this.config.maxTokens ? tokenLimitField(this.config, base, this.config.maxTokens) : {}), messages: [
         { role: 'system', content: providerInstructions(this.language) },
         ...messages.map((message) => ({ role: message.role, content: message.content })),
       ] }),
@@ -122,7 +140,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const data = await requestJson<{ choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }> }>(`${base}/chat/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({ model: this.config.defaultModel, ...(this.config.temperature !== undefined ? { temperature: this.config.temperature } : {}), ...(this.config.maxTokens ? { max_tokens: this.config.maxTokens } : {}), messages: [
+      body: JSON.stringify({ model: this.config.defaultModel, ...(this.config.temperature !== undefined ? { temperature: this.config.temperature } : {}), ...(this.config.maxTokens ? tokenLimitField(this.config, base, this.config.maxTokens) : {}), messages: [
         { role: 'system', content: providerInstructions(this.language) },
         { role: 'user', content: prompt },
       ] }),
@@ -132,22 +150,24 @@ export class OpenAICompatibleProvider implements LLMProvider {
   }
   private async askGemini(prompt: string): Promise<string> {
     const base = (this.config.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '');
-    const endpoint = `${base}/models/${encodeURIComponent(this.config.defaultModel)}:generateContent?key=${encodeURIComponent(this.apiKey)}`;
+    const endpoint = `${base}/models/${encodeURIComponent(this.config.defaultModel)}:generateContent`;
     const data = await requestJson<{ candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }>(endpoint, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      // The key travels in a header: URL query strings end up in proxy and access logs.
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': this.apiKey },
       body: JSON.stringify({ contents: [{ parts: [{ text: `${providerInstructions(this.language)}\n\n${prompt}` }] }], ...(this.config.temperature !== undefined || this.config.maxTokens ? { generationConfig: { ...(this.config.temperature !== undefined ? { temperature: this.config.temperature } : {}), ...(this.config.maxTokens ? { maxOutputTokens: this.config.maxTokens } : {}) } } : {}) }),
     }, this.config.name);
     return data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? '';
   }
   private async chatGemini(messages: ProviderMessage[]): Promise<string> {
     const base = (this.config.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '');
-    const endpoint = `${base}/models/${encodeURIComponent(this.config.defaultModel)}:generateContent?key=${encodeURIComponent(this.apiKey)}`;
+    const endpoint = `${base}/models/${encodeURIComponent(this.config.defaultModel)}:generateContent`;
     const system = [providerInstructions(this.language), ...messages.filter((message) => message.role === 'system').map((message) => message.content)].join('\n\n');
     const contents = normalizeProviderTurns(messages).map((message) => ({
       role: message.role === 'assistant' ? 'model' : 'user', parts: [{ text: message.content }],
     }));
     const data = await requestJson<{ candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }>(endpoint, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      // The key travels in a header: URL query strings end up in proxy and access logs.
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': this.apiKey },
       body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, ...(this.config.temperature !== undefined || this.config.maxTokens ? { generationConfig: { ...(this.config.temperature !== undefined ? { temperature: this.config.temperature } : {}), ...(this.config.maxTokens ? { maxOutputTokens: this.config.maxTokens } : {}) } } : {}) }),
     }, this.config.name);
     return data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? '';
@@ -198,6 +218,7 @@ export class OpenAIOAuthProvider implements LLMProvider {
       system,
       messages: messages.filter((message) => message.role !== 'system').map((message) => ({ role: message.role, content: message.content })),
       ...this.generationSettings(),
+      abortSignal: providerTimeoutSignal(),
     }), this.config.name);
     return result.text;
   }
@@ -209,7 +230,7 @@ export class OpenAIOAuthProvider implements LLMProvider {
   }
   async listModels(): Promise<string[]> { return [this.model]; }
   async ask(prompt: string): Promise<string> {
-    const result = await withProviderTimeout(generateText({ model: this.client(this.config.defaultModel), system: providerInstructions(this.language), prompt, ...this.generationSettings() }), this.config.name);
+    const result = await withProviderTimeout(generateText({ model: this.client(this.config.defaultModel), system: providerInstructions(this.language), prompt, ...this.generationSettings(), abortSignal: providerTimeoutSignal() }), this.config.name);
     return result.text;
   }
 }
@@ -233,8 +254,8 @@ export async function testProviderConnection(config: ProviderConfig, language: P
   // unrelated OPENAI_API_KEY environment variable make an OAuth config look
   // healthy while the account session is actually missing.
   const oauthToken = oauth ? await getOpenAIToken() : undefined;
-  const resolved = oauth && config.defaultModel === 'gpt-5.3-codex'
-    ? { ...config, defaultModel: DEFAULT_OPENAI_OAUTH_MODEL } : config;
+  // Configs passed straight in (login/wizard before saving) have not been normalized yet.
+  const resolved = oauth ? { ...config, defaultModel: migrateLegacyOAuthModel(config.defaultModel) } : config;
   const client = resolved.type === 'openai' && resolved.connectionMode === 'oauth'
     ? oauthToken ? new OpenAIOAuthProvider(resolved, language) : undefined
     : key ? new OpenAICompatibleProvider(resolved, key, language) : undefined;
@@ -265,7 +286,8 @@ export async function getProvider(id?: string, model?: string, language: Provide
   // ChatGPT-account OAuth does not expose every Codex model. Older Seed
   // versions suggested gpt-5.3-codex, which the OAuth endpoint rejects with
   // HTTP 400; transparently move that legacy default to a supported model.
-  if (useOAuth && resolved.defaultModel === 'gpt-5.3-codex') resolved.defaultModel = DEFAULT_OPENAI_OAUTH_MODEL;
+  // The model argument and SEED_OPENAI_OAUTH_MODEL bypass loadConfig, so migrate here as well.
+  if (useOAuth) resolved.defaultModel = migrateLegacyOAuthModel(resolved.defaultModel);
   if (id && !key) throw new Error('provider-credential-missing');
   if (useOAuth) {
     await ensureOpenAIAuthFile();

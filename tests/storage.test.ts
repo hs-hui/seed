@@ -100,7 +100,7 @@ describe('atomic storage writes', () => {
       await writeFile(path.join(store.base, 'seed.json'), '{broken', 'utf8');
       const recovered = await store.load();
       expect(recovered.coreIdea).toBe(seed.coreIdea);
-      expect(JSON.parse(await readFile(path.join(store.base, 'seed.json'), 'utf8')).coreIdea).toBe(seed.coreIdea);
+      expect(await readFile(path.join(store.base, 'seed.json'), 'utf8')).toBe('{broken');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 

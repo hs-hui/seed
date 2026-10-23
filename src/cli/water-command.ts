@@ -7,6 +7,7 @@ import { currentLanguage, t } from '../i18n/index.js';
 import type { SeedStore } from '../storage/store.js';
 import { waterInsight, waterPerspectives } from '../ai/provider.js';
 import { addConversation, addEvent } from '../core/seed-manager.js';
+import { latestSuggestions, saveSuggestions } from '../core/suggestions.js';
 import type { CommonOptions } from './config-commands.js';
 
 export function registerWaterCommand(program: Command, deps: {
@@ -19,8 +20,13 @@ export function registerWaterCommand(program: Command, deps: {
   const { addCommon, run, targetStore, currentSeed, print } = deps;
   const water = addCommon(program.command('water').description(t('help.water'))).argument('[lens]', t('cli.waterArgument')).option('--answer <text>', t('cli.waterAnswerOption'));
   water.action(async (lens: string | undefined, options: CommonOptions & { answer?: string }) => run(async () => {
-    const store = await targetStore(options.seed); const seed = await currentSeed(store); if (seed.status === 'dormant') throw new Error('seed-dormant'); const perspectives = await waterPerspectives(seed, options.provider, options.model, currentLanguage());
-    if (!lens && (options.json || !process.stdin.isTTY || options.input === false)) { print({ perspectives }, Boolean(options.json)); return; }
+    const store = await targetStore(options.seed); const seed = await currentSeed(store); if (seed.status === 'dormant') throw new Error('seed-dormant');
+    const shown = lens ? await latestSuggestions<{ id: string; name: string; question: string }>(store, seed.id, 'water-perspectives') : undefined;
+    const perspectives = shown ?? await waterPerspectives(seed, options.provider, options.model, currentLanguage());
+    if (!lens) {
+      await saveSuggestions(store, seed.id, 'water-perspectives', perspectives);
+      if (options.json || !process.stdin.isTTY || options.input === false) { print({ perspectives }, Boolean(options.json)); return; }
+    }
     let selected = lens ? perspectives.find((item) => item.id.toLowerCase() === lens.toLowerCase() || item.name.toLowerCase() === lens.toLowerCase()) : undefined;
     if (!selected && lens) { const index = Number(lens) - 1; if (Number.isInteger(index) && index >= 0) selected = perspectives[index]; }
     if (!selected) {
@@ -30,6 +36,8 @@ export function registerWaterCommand(program: Command, deps: {
       selected = perspectives[index];
     }
     if (!selected) throw new Error('water-lens-not-found');
+    // A perspectives list that was never shown is saved only once a lens resolves against it.
+    if (lens && !shown) await saveSuggestions(store, seed.id, 'water-perspectives', perspectives);
     const insight = await waterInsight(seed, selected, options.provider, options.model, currentLanguage());
     let reflection = options.answer?.trim() ?? '';
     if (!reflection && process.stdin.isTTY && !options.json && options.input !== false) reflection = (await input({ message: t('water.followUpPrompt') })).trim();

@@ -220,7 +220,7 @@
   "water.assumptions": "Things to check",
   "water.checkLabel": "Check",
   "water.saved": "Saved this perspective to {file}.",
-  "cli.webOption": "Use public web search for sources",
+  "cli.webOption": "Use public web search for sources (sends the idea summary to a public search engine)",
   "cli.noWebOption": "Do not use web search",
   "sunlight.title": "☀️ SUNLIGHT — reality check",
   "sunlight.fact": "Fact",

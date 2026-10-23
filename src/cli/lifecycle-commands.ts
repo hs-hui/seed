@@ -1,14 +1,12 @@
-import { randomUUID } from 'node:crypto';
 import type { Command } from 'commander';
 import { confirm, input, select } from '@inquirer/prompts';
 import type { SeedState } from '../domain.js';
-import { now } from '../domain.js';
 import { currentLanguage, t } from '../i18n/index.js';
 import type { SeedStore } from '../storage/store.js';
 import { classifyGrowthInput } from '../ai/provider.js';
 import { applyGrowth, changeGrowthQuestion, isGrowthPauseRequest, isQuestionChangeRequest } from '../core/growth.js';
+import { appendWakeFollowUp } from '../core/followup.js';
 import { restoreItem, wake, wither } from '../core/lifecycle.js';
-import { addConversation } from '../core/seed-manager.js';
 import { printGrowthQuestion, printGrowthSignals } from './growth-session.js';
 import type { CommonOptions } from './config-commands.js';
 
@@ -46,9 +44,7 @@ export function registerLifecycleCommands(program: Command, deps: {
       return;
     }
     if (!answer.trim()) return;
-    const latest = await store.load(); const openQuestion = { id: randomUUID(), seedId: latest.id, question, focus: 'validation' as const, importance: 'medium' as const, status: 'open' as const, createdAt: now() };
-    await addConversation(store, { seedId: latest.id, role: 'assistant', type: 'question', content: question, metadata: { focus: 'validation', source: 'wake' } });
-    await store.save({ ...latest, openQuestions: [...latest.openQuestions, openQuestion], updatedAt: now() });
+    await appendWakeFollowUp(store, question);
     if (isGrowthPauseRequest(answer)) { console.log(t('grow.pause')); return; }
     if (isQuestionChangeRequest(answer)) {
       const next = await changeGrowthQuestion(store, await store.load(), options.provider, undefined, options.model, currentLanguage(), answer);

@@ -220,7 +220,7 @@
   "water.assumptions": "확인해 볼 점",
   "water.checkLabel": "확인할 점",
   "water.saved": "이 관점을 {file}에 저장했습니다.",
-  "cli.webOption": "공개 웹 검색으로 출처 사용",
+  "cli.webOption": "공개 웹 검색으로 출처 사용 (아이디어 요약을 공개 검색엔진으로 전송)",
   "cli.noWebOption": "웹 검색 사용 안 함",
   "sunlight.title": "☀️ SUNLIGHT — 현실 검증",
   "sunlight.fact": "사실",

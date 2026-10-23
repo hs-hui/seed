@@ -21,7 +21,7 @@ When you're ready, Seed turns the conversation into real documents: a product pl
 - **Nothing is lost.** Every answer, every direction you tried, and every decision you made is saved locally and can be revisited.
 - **You can always undo.** Trimmed-away ideas aren't deleted — they can be restored any time.
 - **Honest feedback.** Seed points out contradictions and gaps instead of just cheering you on.
-- **Your choice of AI.** Connect OpenAI, Gemini, Claude, or any OpenAI-compatible provider — Seed never sends your idea anywhere without a provider you configured.
+- **Your choice of AI.** Connect OpenAI, Gemini, Claude, or any OpenAI-compatible provider — Seed never sends your idea anywhere without a provider you configured, except the optional `--web` search in `seed sunlight` (see below).
 
 ## Install
 
@@ -35,7 +35,7 @@ Or try it once without installing:
 npx @seed-cli/seed "An app that helps me remember to text my friends back"
 ```
 
-Requires [Node.js](https://nodejs.org) 20 or newer.
+Requires [Node.js](https://nodejs.org) 20.10 or newer.
 
 ## Getting started
 
@@ -121,12 +121,12 @@ seed config
 
 This opens a short setup wizard where you can choose:
 
-- **OpenAI** — sign in with your account, or use an API key
+- **OpenAI** — sign in with your account, or use an API key. Account sign-in is experimental: it uses an unofficial login flow that may stop working, so API key mode is the supported path.
 - **Google Gemini** — API key
 - **Anthropic Claude** — API key
 - **A custom provider** — any OpenAI-compatible API (OpenRouter, Groq, a self-hosted model, etc.)
 
-API keys are only ever read from environment variables and are never written to disk. You can switch providers at any time with `seed config use <provider>`. If a request fails — a bad key, a network problem, or the provider itself is down — Seed stops and tells you exactly what went wrong instead of silently guessing; just fix the issue and try again.
+API keys are only ever read from environment variables and are never written to disk. Provider settings are stored in `~/.seed/config.json`, and a project's `.seed/config.json` can only set the language and choose one of the providers you configured. You can switch providers at any time with `seed config use <provider>`. If a request fails — a bad key, a network problem, or the provider itself is down — Seed stops and tells you exactly what went wrong instead of silently guessing; just fix the issue and try again.
 
 ```bash
 seed config list        # see what's configured
@@ -148,7 +148,7 @@ You can also set your language permanently with `seed config set lang ko`. Whate
 
 ## Where does my data go?
 
-Everything Seed knows about your idea lives in a `.seed/` folder inside your project — plain JSON and Markdown files, nothing hidden or sent anywhere unless you've connected an AI provider. Nothing outside that folder is ever touched; Seed never edits your source code or other project files.
+Everything Seed knows about your idea lives in a `.seed/` folder inside your project — plain JSON and Markdown files, nothing hidden or sent anywhere unless you've connected an AI provider or use the optional `--web` search. Seed also adds `.seed/` to your project's `.gitignore` when you plant an idea (creating the file if it doesn't exist), and `seed evolve` creates a new child folder inside your project folder. Seed never edits your source code or other project files. The `--web` option of `seed sunlight` sends the idea summary to a public search engine, and it is off by default.
 
 ## Command reference
 

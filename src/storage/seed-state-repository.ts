@@ -28,12 +28,11 @@ export class SeedStateRepository {
     catch (error) {
       // A newer schema must never be overwritten by an older rolling backup.
       if (error instanceof Error && error.message.startsWith('seed-version-')) throw error;
-      const backupFile = this.backupFile;
-      try {
-        const recovered = migrateSeed(await readJson<unknown>(backupFile));
-        await atomicWrite(this.file, `${JSON.stringify(recovered, null, 2)}\n`);
-        return recovered;
-      } catch { throw error; }
+      // Return the recovered state without rewriting seed.json here: this path
+      // runs outside the keyed lock, so a rewrite could race a concurrent save.
+      // The next save persists the recovered state under the normal queue.
+      try { return migrateSeed(await readJson<unknown>(this.backupFile)); }
+      catch { throw error; }
     }
   }
 

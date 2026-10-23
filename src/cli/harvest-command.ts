@@ -4,6 +4,7 @@ import type { HarvestType, SeedState } from '../domain.js';
 import { currentLanguage, t } from '../i18n/index.js';
 import type { SeedStore } from '../storage/store.js';
 import { harvest, harvestTitle } from '../core/harvest.js';
+import { inferProviderLanguage } from '../ai/provider.js';
 import { assessHarvestReadiness } from '../core/harvest-readiness.js';
 import type { CommonOptions } from './config-commands.js';
 
@@ -40,7 +41,9 @@ export function registerHarvestCommand(program: Command, deps: {
       process.exitCode = 1;
       return;
     }
-    const file = await harvest(store, seed, type, currentLanguage(), { draft: options.draft, ai: true, providerId: options.provider, model: options.model });
+    // The document is the user's idea written out, so it follows the idea's language; UI language only localizes CLI chrome.
+    const language = inferProviderLanguage(currentLanguage(), [seed.originalIdea, seed.coreIdea, seed.problem, ...seed.goals]);
+    const file = await harvest(store, seed, type, language, { draft: options.draft, ai: true, providerId: options.provider, model: options.model });
     print(options.json ? { type, file } : t('harvest.saved', { type: harvestTitle(type, currentLanguage()), file: Array.isArray(file) ? file.join(', ') : file }), Boolean(options.json));
   }, options));
 }

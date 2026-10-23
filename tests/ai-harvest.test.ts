@@ -61,7 +61,8 @@ describe('AI document grounding', () => {
     if (failure === 'missing-section') doc.missing.pop();
     const provider = installProvider(async () => JSON.stringify(doc));
     await expect(generateHarvestDocument(seed, 'prd', 'en', input)).rejects.toThrow('harvest-unsupported-content');
-    expect(provider.chat).toHaveBeenCalledTimes(1);
+    // One retry of generation, and still no semantic review call for an invalid draft.
+    expect(provider.chat).toHaveBeenCalledTimes(2);
   });
 
   it('rejects an invented feature even when it cites a real quote', async () => {
@@ -118,9 +119,9 @@ describe('AI harvest persistence', () => {
       await store.appendConversation({ ...answer, createdAt: '2026-01-01T00:00:01.000Z' });
       await addConversation(store, { seedId: state.id, role: 'user', type: 'answer', content: 'Make the question easier', metadata: { intent: 'change-question' } });
       await addConversation(store, { seedId: state.id, role: 'assistant', type: 'summary', content: 'AI_INVENTED_PAYMENTS' });
-      await recordDecision(store, state, 'Use local files');
+      await recordDecision(store, 'Use local files');
       const branch = await createBranch(store, state, 'Payments', 'Subscriptions');
-      await recordDecision(store, state, 'BRANCH_DECISION', '', branch.id);
+      await recordDecision(store, 'BRANCH_DECISION', '', branch.id);
       await addConversation(store, { seedId: state.id, branchId: branch.id, role: 'user', type: 'answer', content: 'BRANCH_ANSWER' });
       await pruneItem(store, state, branch.id);
       const evidence = buildHarvestInput(await store.load(), await store.branches(state.id), await store.conversations(state.id));
@@ -147,7 +148,8 @@ describe('AI harvest persistence', () => {
 
   it('writes no documents, results or harvest status if a later batch review rejects content', async () => {
     const { root, store, state } = await project(); let calls = 0;
-    installProvider(async (messages) => ++calls === 4 ? JSON.stringify({ verdicts: [{ id: 'c1', supported: false }] }) : respond(messages));
+    // Batch two's review (call 4) and its single generation retry's review (call 6) both reject.
+    installProvider(async (messages) => [4, 6].includes(++calls) ? JSON.stringify({ verdicts: [{ id: 'c1', supported: false }] }) : respond(messages));
     try {
       await expect(harvest(store, state, 'all', 'en', { ai: true, draft: true })).rejects.toThrow('harvest-unsupported-content');
       expect((await readdir(path.join(store.base, 'harvest'))).filter((name) => name.endsWith('.md'))).toEqual([]);
@@ -159,7 +161,7 @@ describe('AI harvest persistence', () => {
   it('rejects stale AI documents when a decision is made during generation', async () => {
     const { root, store, state } = await project();
     installProvider(async (messages) => {
-      if (messages.at(-1)!.content.startsWith('HARVEST_REVIEW')) await recordDecision(store, state, 'Do not add notifications');
+      if (messages.at(-1)!.content.startsWith('HARVEST_REVIEW')) await recordDecision(store, 'Do not add notifications');
       return respond(messages);
     });
     try {

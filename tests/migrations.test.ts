@@ -42,7 +42,7 @@ describe('Seed state migration boundary', () => {
       const file = path.join(store.base, 'seed.json');
       await writeFile(file, '{broken');
       expect((await store.load()).coreIdea).toBe(state.coreIdea);
-      expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ coreIdea: state.coreIdea });
+      expect(await readFile(file, 'utf8')).toBe('{broken');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 

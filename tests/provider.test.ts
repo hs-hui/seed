@@ -196,7 +196,7 @@ describe('AI language handling', () => {
     await writeFile(path.join(root, 'config.json'), JSON.stringify({ version: 1, activeProvider: 'openai', providers: [{ id: 'openai', name: 'OpenAI', type: 'openai', defaultModel: 'test-model', enabled: true }] }));
     globalThis.fetch = vi.fn(async () => { throw new Error('offline'); }) as typeof fetch;
     try {
-      await expect(classifyGrowthInput('Please give me an easier question', 'What should we build?', 'openai', undefined, 'en')).rejects.toThrow();
+      await expect(classifyGrowthInput('I am not sure what you want from me', 'What should we build?', 'openai', undefined, 'en')).rejects.toThrow();
     } finally {
       globalThis.fetch = originalFetch;
       if (previousHome === undefined) delete process.env.SEED_HOME; else process.env.SEED_HOME = previousHome;
