@@ -9,14 +9,7 @@ import { calculateMaturity, statusForMaturity } from './maturity.js';
 import { detectGrowthInputIntent } from '../ai/input-intent.js';
 import path from 'node:path';
 import { withKeyedLock } from '../utils/fs.js';
-function requiredFocus(seed: SeedState): 'user' | 'problem' | 'goal' | 'constraint' | 'assumption' | 'validation' {
-  if (!seed.users.length) return 'user';
-  if (!seed.problem) return 'problem';
-  if (!seed.goals.length) return 'goal';
-  if (!seed.constraints.length) return 'constraint';
-  if (!seed.assumptions.length) return 'assumption';
-  return 'validation';
-}
+import { requiredGrowthFocus } from '../domain/growth-focus.js';
 
 /**
  * Short meta replies are part of a conversation, not idea evidence. Keep this
@@ -187,7 +180,7 @@ async function applyGrowthUnlocked(store: SeedStore, seed: SeedState, answer: st
   // focus metadata. Fall back to the next required field so its answer is
   // still filed in the right part of the seed instead of becoming a goal by
   // accident.
-  const focus = askedQuestion?.focus ?? requiredFocus(seed);
+  const focus = askedQuestion?.focus ?? requiredGrowthFocus(seed);
   // "사용자" appears in many outcome questions, so only classify a
   // response as a user definition when the question asks who/which person.
   const asksUser = focus === 'user' || askedText.includes('who') || /누구|누가|대상/.test(askedText);

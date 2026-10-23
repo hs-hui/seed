@@ -5,6 +5,7 @@ import type { ContextExtras } from './context-builder.js';
 import { getProvider } from './transport.js';
 export { DEFAULT_OPENAI_MODEL, DEFAULT_OPENAI_OAUTH_MODEL, OpenAICompatibleProvider, OpenAIOAuthProvider, providerKey, testProviderConnection, getProvider } from './transport.js';
 import { detectGrowthInputIntent } from './input-intent.js';
+import { requiredGrowthFocus } from '../domain/growth-focus.js';
 import { growthQuestionPrompt, growthUpdatePrompt } from './prompts/growth.js';
 import { growthIntentPrompt } from './prompts/system.js';
 import { bloomPrompt, branchPrompt, evolutionPrompt, prunePrompt, sunlightPrompt, waterDetailPrompt, waterPerspectivesPrompt } from './prompts/shape.js';
@@ -92,14 +93,6 @@ export async function classifyGrowthInput(
   return modelIntent ?? safetyIntent;
 }
 
-function requiredGrowthFocus(seed: SeedState): GrowthFocus {
-  if (!seed.users.length) return 'user';
-  if (!seed.problem) return 'problem';
-  if (!seed.goals.length) return 'goal';
-  if (!seed.constraints.length) return 'constraint';
-  if (!seed.assumptions.length) return 'assumption';
-  return 'validation';
-}
 async function askConversational(
   provider: LLMProvider,
   systemPrompt: string,
