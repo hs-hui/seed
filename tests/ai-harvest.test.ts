@@ -134,11 +134,11 @@ describe('AI harvest persistence', () => {
     const { root, store, state } = await project();
     const provider = installProvider(async (messages) => respond(messages));
     try {
-      const files = await harvest(store, state, 'all', 'en', { ai: true, draft: true }) as string[];
+      const files = await harvest(store, 'all', 'en', { draft: true }) as string[];
       expect(files).toHaveLength(6);
       expect(provider.chat).toHaveBeenCalledTimes(12);
       expect(await readFile(files[2]!, 'utf8')).toContain('Source evidence');
-      const second = await harvest(store, state, 'prd', 'en', { ai: true, draft: true }) as string;
+      const second = await harvest(store, 'prd', 'en', { draft: true }) as string;
       expect(path.basename(second)).toBe('prd-v2.md');
       expect((await store.load()).originalIdea).toBe(idea);
       expect((await store.harvestResults(state.id))).toHaveLength(7);
@@ -149,7 +149,7 @@ describe('AI harvest persistence', () => {
     const { root, store, state } = await project(); let calls = 0;
     installProvider(async (messages) => ++calls === 4 ? JSON.stringify({ verdicts: [{ id: 'c1', supported: false }] }) : respond(messages));
     try {
-      await expect(harvest(store, state, 'all', 'en', { ai: true, draft: true })).rejects.toThrow('harvest-unsupported-content');
+      await expect(harvest(store, 'all', 'en', { draft: true })).rejects.toThrow('harvest-unsupported-content');
       expect((await readdir(path.join(store.base, 'harvest'))).filter((name) => name.endsWith('.md'))).toEqual([]);
       expect(await store.harvestResults(state.id)).toEqual([]);
       expect((await store.load()).status).toBe(state.status);
@@ -163,7 +163,7 @@ describe('AI harvest persistence', () => {
       return respond(messages);
     });
     try {
-      await expect(harvest(store, state, 'prd', 'en', { ai: true, draft: true })).rejects.toThrow('harvest-evidence-changed');
+      await expect(harvest(store, 'prd', 'en', { draft: true })).rejects.toThrow('harvest-evidence-changed');
       expect((await store.load()).decisions[0]!.decision).toBe('Do not add notifications');
       expect(await store.harvestResults(state.id)).toEqual([]);
     } finally { await rm(root, { recursive: true, force: true }); }

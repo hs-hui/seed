@@ -12,6 +12,25 @@ import type { GrowthFocus } from '../../src/domain.js';
  * AI-backed call.
  */
 function scriptedResponse(prompt: string, language: 'en' | 'ko'): string {
+  if (prompt.startsWith('HARVEST_REVIEW\n')) {
+    // Every scripted claim quotes its evidence verbatim, so the review accepts it.
+    const request = JSON.parse(prompt.slice('HARVEST_REVIEW\n'.length)) as { claims: Array<{ id: string }> };
+    return JSON.stringify({ verdicts: request.claims.map((claim) => ({ id: claim.id, supported: true })) });
+  }
+  if (prompt.startsWith('HARVEST_DOCUMENT\n')) {
+    // One claim per recorded user record, placed in the first section. Other
+    // sections are marked missing, so no test output gains invented content.
+    const request = JSON.parse(prompt.slice('HARVEST_DOCUMENT\n'.length)) as {
+      sections: string[]; input: { evidence: Array<{ id: string; text: string }> };
+    };
+    const [first, ...rest] = request.sections;
+    return JSON.stringify({
+      claims: request.input.evidence.map((entry, index) => ({
+        id: `c${index + 1}`, section: first, text: entry.text, evidence: [{ sourceId: entry.id, quote: entry.text }],
+      })),
+      missing: rest,
+    });
+  }
   if (prompt.includes('BRANCH_SUGGEST')) {
     return JSON.stringify({ branches: language === 'ko' ? [
       { name: '집중 워크플로', summary: '가장 필요한 한 가지부터 해결합니다.' },

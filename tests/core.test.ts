@@ -7,6 +7,7 @@ import { addConversation, plant, recordDecision } from '../src/core/seed-manager
 import { applyGrowth, askGrowthQuestion, changeGrowthQuestion, growthReady, isGrowthPauseRequest, isQuestionChangeRequest } from '../src/core/growth.js';
 import { calculateMaturity } from '../src/core/maturity.js';
 import { harvest } from '../src/core/harvest.js';
+import { documentSections } from '../src/ai/harvest-document.js';
 import { branchSuggestions, createBranch, pruneItem } from '../src/core/branch.js';
 import { dimensionsFor } from '../src/ai/provider.js';
 import { statusForMaturity } from '../src/core/maturity.js';
@@ -259,7 +260,7 @@ describe('Seed MVP flow', () => {
       expect(saved.coreIdea).toBe(seed.coreIdea);
       const controls = (await store.conversations(seed.id)).filter((entry) => entry.metadata?.intent === 'change-question');
       expect(controls).toHaveLength(1);
-      await harvest(store, saved, 'prd', 'ko');
+      await harvest(store, 'prd', 'ko', { draft: true });
       expect((await store.harvestResults(seed.id))[0]?.content).not.toContain('너무 어려워 다른질문');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
@@ -433,7 +434,7 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-harvest-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A small idea');
-      const one = await harvest(store, seed, 'idea', 'en'); const two = await harvest(store, seed, 'idea', 'en');
+      const one = await harvest(store, 'idea', 'en'); const two = await harvest(store, 'idea', 'en');
       expect(one).toMatch(/idea-v1\.md$/); expect(two).toMatch(/idea-v2\.md$/);
       expect((await store.load()).status).toBe('harvested');
       const results = await store.harvestResults(seed.id); expect(results).toHaveLength(2); expect(results[0]?.maturitySnapshot).toBe(5); expect(results[1]?.content).toContain('A small idea');
@@ -445,12 +446,16 @@ describe('Seed MVP flow', () => {
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A language-safe idea');
       const [koreanFile, englishFile] = await Promise.all([
-        harvest(store, seed, 'prd', 'ko'),
-        harvest(store, seed, 'trd', 'en'),
+        harvest(store, 'prd', 'ko', { draft: true }),
+        harvest(store, 'trd', 'en', { draft: true }),
       ]);
       const { readFile } = await import('node:fs/promises');
-      expect(await readFile(koreanFile as string, 'utf8')).toContain('제품 요구사항 문서');
-      expect(await readFile(englishFile as string, 'utf8')).toContain('Technical Requirements Document');
+      const korean = await readFile(koreanFile as string, 'utf8');
+      const english = await readFile(englishFile as string, 'utf8');
+      expect(korean).toContain('## 상세 사용자 흐름');
+      expect(korean).not.toContain('## Detailed user flow');
+      expect(english).toContain('## Technical choices');
+      expect(english).not.toContain('## 기술 선택');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
@@ -458,10 +463,10 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-harvest-gap-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A versioned idea');
-      const first = await harvest(store, seed, 'idea', 'en');
-      await harvest(store, seed, 'idea', 'en');
-      await rm(first);
-      const third = await harvest(store, seed, 'idea', 'en');
+      const first = await harvest(store, 'idea', 'en');
+      await harvest(store, 'idea', 'en');
+      await rm(first as string);
+      const third = await harvest(store, 'idea', 'en');
       expect(third).toMatch(/idea-v3\.md$/);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
@@ -471,8 +476,8 @@ describe('Seed MVP flow', () => {
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A concurrent harvest idea');
       const files = await Promise.all([
-        harvest(store, seed, 'idea', 'en'),
-        harvest(store, seed, 'idea', 'en'),
+        harvest(store, 'idea', 'en'),
+        harvest(store, 'idea', 'en'),
       ]);
       expect(new Set(files)).toHaveLength(2);
       expect(files.map((file) => String(file).match(/idea-v[12]\.md$/)?.[0])).toEqual(expect.arrayContaining(['idea-v1.md', 'idea-v2.md']));
@@ -480,46 +485,40 @@ describe('Seed MVP flow', () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
-  it('harvests all document types with the required PRD/TRD sections', async () => {
+  it('harvests all document types with every section heading for each type', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-all-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A small idea');
-      const files = await harvest(store, seed, 'all', 'en');
+      const files = await harvest(store, 'all', 'en', { draft: true }) as string[];
       expect(files).toHaveLength(6);
       expect(await store.harvestResults(seed.id)).toHaveLength(6);
       const { readFile } = await import('node:fs/promises');
       const prd = await readFile(files.find((file) => file.endsWith('prd-v1.md'))!, 'utf8');
       const trd = await readFile(files.find((file) => file.endsWith('trd-v1.md'))!, 'utf8');
       const readme = await readFile(files.find((file) => file.endsWith('readme-v1.md'))!, 'utf8');
-      for (const section of ['## 1.', '## 2.', '## 3.', '## 4.', '## 5.', '## 6.', '## 7.', '## 8.', '## 9.', '## 10.', '## 11.', '## 12.', '## 13.']) expect(prd).toContain(section);
-      for (const section of ['## 1.', '## 2.', '## 3.', '## 4.', '## 5.', '## 6.', '## 7.', '## 8.', '## 9.', '## 10.', '## 11.', '## 12.', '## 13.', '## 14.', '## 15.', '## 16.', '## 17.', '## 18.', '## 19.', '## 20.', '## 21.']) expect(trd).toContain(section);
-      expect(prd).toContain('**Maturity:**');
-      expect(prd).toContain('### Conversation evidence');
-      expect(readme).toContain('## Overview');
-      expect(readme).toContain('## Target users');
-      expect(readme).toContain('TBD - implementation and usage instructions have not been recorded.');
-      expect(readme).not.toContain('npm install');
-      expect(readme).not.toContain('MIT');
+      for (const entry of documentSections.prd) expect(prd).toContain(`## ${entry.en}`);
+      for (const entry of documentSections.trd) expect(trd).toContain(`## ${entry.en}`);
+      for (const entry of documentSections.readme) expect(readme).toContain(`## ${entry.en}`);
+      expect(prd).toContain('## Source evidence');
+      expect(prd).toContain('A small idea');
+      expect(prd).toContain('TBD — user records are insufficient or conflicting for this section.');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
-  it('localizes harvested PRD/TRD static guidance to Korean', async () => {
+  it('localizes harvested section headings and missing-section notes to Korean', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-harvest-ko-'));
     try {
       const store = new SeedStore(root);
-      const seed = await plant(store, '공부 앱 아이디어');
-      const prdFile = await harvest(store, seed, 'prd', 'ko');
-      const trdFile = await harvest(store, await store.load(), 'trd', 'ko');
+      await plant(store, '공부 앱 아이디어');
+      const prdFile = await harvest(store, 'prd', 'ko', { draft: true });
+      const trdFile = await harvest(store, 'trd', 'ko', { draft: true });
       const { readFile } = await import('node:fs/promises');
       const prd = await readFile(prdFile as string, 'utf8');
       const trd = await readFile(trdFile as string, 'utf8');
-      expect(prd).toContain('제품 요구사항 문서');
-      expect(prd).toContain('제품의 사용자 흐름과 UX 요구사항이 기록되지 않았습니다.');
-      expect(prd).not.toContain('Seed가 한 번에 하나의 핵심 질문을 합니다.');
-      expect(prd).toContain('기록된 브랜치가 없습니다.');
-      expect(prd).toContain('확정된 결정');
-      expect(trd).toContain('기술 요구사항 문서');
-      expect(trd).toContain('AI / LLM 아키텍처');
+      for (const entry of documentSections.prd) { expect(prd).toContain(`## ${entry.ko}`); expect(prd).not.toContain(`## ${entry.en}`); }
+      for (const entry of documentSections.trd) expect(trd).toContain(`## ${entry.ko}`);
+      expect(prd).toContain('작성 근거');
+      expect(prd).toContain('미정 — 이 항목을 구체화할 사용자 기록이 부족하거나 서로 충돌합니다.');
       expect(trd).toContain('미정');
       expect(trd).not.toContain('TBD —');
     } finally { await rm(root, { recursive: true, force: true }); }
@@ -530,50 +529,40 @@ describe('Seed MVP flow', () => {
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A gentle way to remember birthdays');
       const { readFile } = await import('node:fs/promises');
-      const trd = await readFile(await harvest(store, seed, 'trd', 'en') as string, 'utf8');
+      const trd = await readFile(await harvest(store, 'trd', 'en', { draft: true }) as string, 'utf8');
       for (const invented of ['Node.js', 'TypeScript', 'Commander', 'Zod', 'src/cli', 'OpenAI']) expect(trd).not.toContain(invented);
-      expect(trd).toContain('## 3. Technology Stack\n- TBD');
-      expect(trd).toContain('## 10. Storage\n- TBD');
+      expect(trd).toContain('## Technical choices\n\nTBD — user records are insufficient or conflicting for this section.');
       expect(trd).toContain('A gentle way to remember birthdays');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
-  it('derives TRD technology choices from constraints, decisions, and answers with citations', async () => {
+  it('grounds TRD technology choices in recorded answers and confirmed decisions with citations', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-trd-evidence-'));
     try {
       const store = new SeedStore(root); const planted = await plant(store, 'Shared grocery list for roommates');
-      await store.save({ ...planted, constraints: ['Must work offline on mobile'], goals: ['Roommates see purchases in real-time'] });
-      await addConversation(store, { seedId: planted.id, role: 'user', type: 'answer', content: 'We want a React Native app with Supabase for sync' });
+      const answer = await addConversation(store, { seedId: planted.id, role: 'user', type: 'answer', content: 'We want a React Native app with Supabase for sync' });
       await recordDecision(store, await store.load(), 'Ship to the App Store first', 'iOS users dominate our group');
       const { readFile } = await import('node:fs/promises');
-      const trd = await readFile(await harvest(store, await store.load(), 'trd', 'en') as string, 'utf8');
-      expect(trd).toContain('- Mobile — constraint: "Must work offline on mobile"');
-      expect(trd).toContain('- React Native — user answer: "We want a React Native app with Supabase for sync"');
-      expect(trd).not.toMatch(/- React —/);
-      expect(trd).toContain('- Supabase — user answer:');
-      expect(trd).toContain('- Offline — constraint:');
-      expect(trd).toContain('- Real-time (not confirmed yet) — goal:');
-      expect(trd).toContain('- App Store — confirmed decision: "Ship to the App Store first');
-      expect(trd).toContain('- iOS — confirmed decision:');
-      expect(trd).toContain('Acceptance test: the target user can achieve "Roommates see purchases in real-time"');
+      const trd = await readFile(await harvest(store, 'trd', 'en', { draft: true }) as string, 'utf8');
+      expect(trd).toContain('We want a React Native app with Supabase for sync');
+      expect(trd).toContain('Ship to the App Store first');
+      expect(trd).toContain(`answer:${answer.id}`);
+      expect(trd).toContain('decision:');
       expect(trd).not.toContain('Node.js');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
-  it('includes accumulated research and branch decisions in the PRD harvest', async () => {
+  it('grounds the PRD in confirmed decisions and leaves unverified research summaries out', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-harvest-context-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A focused workflow');
-      const branch = await createBranch(store, seed, 'Repository tour', 'Help a new developer orient quickly');
+      await createBranch(store, seed, 'Repository tour', 'Help a new developer orient quickly');
       await store.saveResearch({ id: 'research-1', seedId: seed.id, source: 'https://example.com', title: 'User interview', summary: 'Developers need a faster first step.', relevance: 'high', retrievedAt: new Date().toISOString(), isVerified: true, isEstimate: false });
       await recordDecision(store, await store.load(), 'Use a CLI-first workflow', 'Validate the smallest loop before adding surfaces');
-      const file = await harvest(store, { ...(await store.load()), goals: ['Reach the first useful result'], constraints: ['One workflow only'], users: ['New developers'] }, 'prd', 'en');
-      const { readFile } = await import('node:fs/promises'); const document = await readFile(file as string, 'utf8');
-      expect(document).toContain('Repository tour: Help a new developer orient quickly');
-      expect(document).toContain('User interview: Developers need a faster first step. [verified]');
-      expect(document).toContain('Use a CLI-first workflow — Validate the smallest loop before adding surfaces');
-      expect(document).toContain('One workflow only');
-      expect(branch.id).toBeTruthy();
+      const { readFile } = await import('node:fs/promises'); const document = await readFile(await harvest(store, 'prd', 'en', { draft: true }) as string, 'utf8');
+      expect(document).toContain('Use a CLI-first workflow');
+      expect(document).not.toContain('Developers need a faster first step.');
+      expect(document).not.toContain('Help a new developer orient quickly');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
@@ -770,7 +759,7 @@ describe('Seed MVP flow', () => {
       const seed = await plant(store, 'A harvested idea');
       const branch = await createBranch(store, seed, 'Optional path', 'An optional path');
       await pruneItem(store, await store.load(), branch.id);
-      await harvest(store, await store.load(), 'idea', 'en');
+      await harvest(store, 'idea', 'en');
       const restored = await restoreItem(store, await store.load(), branch.id);
       expect(restored.status).toBe('harvested');
     } finally { await rm(root, { recursive: true, force: true }); }

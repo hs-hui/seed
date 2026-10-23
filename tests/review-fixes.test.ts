@@ -11,6 +11,7 @@ import { plant, recordDecision, addConversation } from '../src/core/seed-manager
 import { createBranch, pruneItem } from '../src/core/branch.js';
 import { restoreItem, wither } from '../src/core/lifecycle.js';
 import { harvest } from '../src/core/harvest.js';
+import { useScriptedProvider } from './test-support/scripted-provider.js';
 import { registerSunlightCommand } from '../src/cli/sunlight-command.js';
 import { registerBloomCommand } from '../src/cli/bloom-command.js';
 import * as provider from '../src/ai/provider.js';
@@ -53,8 +54,9 @@ describe('code review regressions', () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
-  it('excludes pruned branch evidence and renders product UX rather than Seed UX', async () => {
+  it('excludes pruned branch evidence from every harvest document', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-harvest-evidence-'));
+    const stopScriptedProvider = await useScriptedProvider();
     try {
       const store = new SeedStore(root);
       const seed = await plant(store, 'Medication reminder');
@@ -65,16 +67,16 @@ describe('code review regressions', () => {
       await pruneItem(store, seed, branch.id);
       for (const lang of ['en', 'ko'] as const) {
         for (const type of ['prd', 'prompt', 'trd'] as const) {
-          const file = await harvest(store, await store.load(), type, lang);
+          const file = await harvest(store, type, lang, { draft: true });
           const content = await readFile(file as string, 'utf8');
           expect(content).not.toContain('Use Flutter');
           expect(content).not.toContain('DISCARDED_ANSWER');
           expect(content).not.toContain('Seed asks one focused question');
           expect(content).not.toContain('Seed가 한 번에 하나의 핵심 질문을 합니다.');
-          if (type === 'prd') expect(content).toContain('Take medication on time');
+          expect(content).toContain('Medication reminder');
         }
       }
-    } finally { await rm(root, { recursive: true, force: true }); }
+    } finally { await stopScriptedProvider(); await rm(root, { recursive: true, force: true }); }
   });
 
   for (const command of ['sunlight', 'bloom'] as const) {
