@@ -43,7 +43,7 @@ export async function interactiveGrowthSession(
 ): Promise<SeedState> {
   session.exitRequested = false;
   let seed = initialSeed;
-  let question = initialQuestion ?? await askGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage());
+  let question = initialQuestion ?? await askGrowthQuestion(store, options.provider, branchId, options.model, currentLanguage());
   seed = await store.load();
   let turns = 0;
   let prompts = 0;
@@ -70,7 +70,7 @@ export async function interactiveGrowthSession(
       break;
     }
     if (isQuestionChangeRequest(answer)) {
-      question = await changeGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage(), answer);
+      question = await changeGrowthQuestion(store, options.provider, branchId, options.model, currentLanguage(), answer);
       seed = await store.load();
       console.log(`\n${t('grow.changeQuestion')}`);
       continue;
@@ -81,12 +81,12 @@ export async function interactiveGrowthSession(
       break;
     }
     if (aiIntent === 'change-question') {
-      question = await changeGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage(), answer);
+      question = await changeGrowthQuestion(store, options.provider, branchId, options.model, currentLanguage(), answer);
       seed = await store.load();
       console.log(`\n${t('grow.changeQuestion')}`);
       continue;
     }
-    const result = await applyGrowth(store, seed, answer, options.provider, branchId, currentLanguage(), options.model);
+    const result = await applyGrowth(store, answer, options.provider, branchId, currentLanguage(), options.model);
     seed = result.seed;
     turns += 1;
     const updateSummary = formatGrowthUpdate(result.before, result.after, seed.maturity, result.update);
@@ -96,7 +96,7 @@ export async function interactiveGrowthSession(
       console.log(updateSummary);
       break;
     }
-    question = await askGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage());
+    question = await askGrowthQuestion(store, options.provider, branchId, options.model, currentLanguage());
     seed = await store.load();
     pendingUpdate = updateSummary;
   }

@@ -48,7 +48,7 @@ export function createGrowthWorkspace(deps: {
     const pending = seed.openQuestions.find((entry) => entry.status === 'open' && entry.branchId === branchId);
     // Older persisted questions still need the current safety check.
     if (pending && isBeginnerFriendlyQuestion(pending.question, inferProviderLanguage(currentLanguage(), [seed.originalIdea, seed.coreIdea, pending.question]))) return;
-    const question = await askGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage());
+    const question = await askGrowthQuestion(store, options.provider, branchId, options.model, currentLanguage());
     printGrowthQuestion(question, false);
   }
 

@@ -30,7 +30,7 @@ export function registerShapeCommands(program: Command, deps: {
       if (!selected) throw new Error('branch-selection-not-found');
       // Invalid selections must not append AI suggestions to history.
       for (const suggestion of suggestions) await addConversation(store, { seedId: seed.id, role: 'assistant', type: 'insight', content: `${suggestion.name}: ${suggestion.summary}`, metadata: { source: 'branch' } });
-      const created = await createBranch(store, seed, selected.name, selected.summary, options.provider);
+      const created = await createBranch(store, selected.name, selected.summary, options.provider);
       print(options.json ? created : t('branch.created', { name: created.name }), Boolean(options.json)); return;
     }
     const suggestions = await branchSuggestions(seed, options.provider, options.model, currentLanguage());
@@ -39,7 +39,7 @@ export function registerShapeCommands(program: Command, deps: {
     console.log(t('branch.title'));
     const selected = await select({ message: t('branch.select', { count: suggestions.length }), choices: suggestions.map((s, i) => ({ name: `${i + 1}. ${s.name} — ${s.summary}`, value: i })) });
     const choice = suggestions[selected]; if (!choice) throw new Error('branch-selection-not-found');
-    const created = await createBranch(store, seed, choice.name, choice.summary, options.provider); console.log(t('branch.created', { name: created.name }));
+    const created = await createBranch(store, choice.name, choice.summary, options.provider); console.log(t('branch.created', { name: created.name }));
   }, options));
 
   const prune = addCommon(program.command('prune').description(t('help.prune'))).argument('[item]', t('cli.pruneArgument'));
@@ -56,7 +56,7 @@ export function registerShapeCommands(program: Command, deps: {
       if (!items.length) { console.log(t('prune.none')); return; }
     }
     let updated = seed;
-    for (const selected of items) updated = await pruneItem(store, await store.load(), selected, currentLanguage());
+    for (const selected of items) updated = await pruneItem(store, selected, currentLanguage());
     if (options.json) print(updated, true);
     else console.log(`${t('prune.done', { item: items.join(', ') })}\n${t('prune.core')}: "${updated.coreIdea}"`);
   }, options));

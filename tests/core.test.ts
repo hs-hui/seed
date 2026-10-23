@@ -74,13 +74,13 @@ describe('Seed MVP flow', () => {
       const store = new SeedStore(root);
       const seed = await plant(store, '  A repository guide for new developers  ');
       expect(seed.originalIdea).toBe('A repository guide for new developers');
-      const question = await askGrowthQuestion(store, seed, 'openai');
+      const question = await askGrowthQuestion(store, 'openai');
       const prompted = await store.load();
       expect(prompted.openQuestions.some((entry) => entry.question === question && entry.status === 'open')).toBe(true);
       expect(prompted.openQuestions.find((entry) => entry.question === question)?.importance).toBe('high');
-      expect(await askGrowthQuestion(store, prompted, 'openai')).toBe(question);
+      expect(await askGrowthQuestion(store, 'openai')).toBe(question);
       expect((await store.conversations(seed.id)).filter((entry) => entry.type === 'question')).toHaveLength(1);
-      const result = await applyGrowth(store, prompted, 'Help a developer find the right starting point.', 'openai');
+      const result = await applyGrowth(store, 'Help a developer find the right starting point.', 'openai');
       expect(result.seed.coreIdea).toContain('Help a developer');
       expect(result.update.updatedSummary).toBe(result.seed.coreIdea);
       expect(result.update.contradictionsDetected).toEqual([]);
@@ -118,7 +118,7 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-empty-answer-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A small idea');
-      await expect(applyGrowth(store, seed, '   ', 'openai')).rejects.toThrow('answer-required');
+      await expect(applyGrowth(store, '   ', 'openai')).rejects.toThrow('answer-required');
       expect(await store.conversations(seed.id)).toHaveLength(0);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
@@ -249,8 +249,8 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-question-change-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A study app');
-      const first = await askGrowthQuestion(store, seed, 'openai', undefined, undefined, 'ko');
-      const changed = await changeGrowthQuestion(store, await store.load(), 'openai', undefined, undefined, 'ko', '너무 어려워 다른질문');
+      const first = await askGrowthQuestion(store, 'openai', undefined, undefined, 'ko');
+      const changed = await changeGrowthQuestion(store, 'openai', undefined, undefined, 'ko', '너무 어려워 다른질문');
       expect(changed).not.toBe(first);
       const saved = await store.load();
       expect(saved.maturity).toBe(seed.maturity);
@@ -281,7 +281,7 @@ describe('Seed MVP flow', () => {
         }],
       };
       await store.save(stale);
-      const question = await askGrowthQuestion(store, stale, 'openai', undefined, undefined, 'ko');
+      const question = await askGrowthQuestion(store, 'openai', undefined, undefined, 'ko');
       const saved = await store.load();
       expect(question).not.toMatch(/검증|가정|만들기 전에/);
       expect(saved.openQuestions.find((entry) => entry.id === 'stale-question')?.status).toBe('cancelled');
@@ -309,7 +309,7 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-branch-decision-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A branching idea');
-      const branch = await createBranch(store, seed, 'Focused path', 'A focused path');
+      const branch = await createBranch(store, 'Focused path', 'A focused path');
       const before = await store.load();
       const result = await recordDecision(store, before, 'Keep the focused path', 'Validate the smallest loop first', branch.id);
       const parent = await store.load(); const savedBranch = (await store.branches(seed.id)).find((item) => item.id === branch.id)!;
@@ -339,9 +339,9 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-branch-context-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A study app');
-      const branch = await createBranch(store, seed, 'Korean path', 'Explore a Korean direction');
+      const branch = await createBranch(store, 'Korean path', 'Explore a Korean direction');
       await addConversation(store, { seedId: seed.id, branchId: branch.id, role: 'user', type: 'answer', content: '학생이 먼저 써요.' });
-      const question = await askGrowthQuestion(store, await store.load(), 'openai', undefined, undefined, 'en');
+      const question = await askGrowthQuestion(store, 'openai', undefined, undefined, 'en');
       expect(question).toContain('Who');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
@@ -353,9 +353,9 @@ describe('Seed MVP flow', () => {
       let seed = await plant(store, 'A study planning app');
       const answers = ['High-school students', 'They do not know what to study first', 'A clear plan they can finish today', 'Only planning and completion for v1', 'Students will return if the plan saves them time'];
       for (const answer of answers) {
-        await askGrowthQuestion(store, seed, 'openai', undefined, undefined, 'en');
+        await askGrowthQuestion(store, 'openai', undefined, undefined, 'en');
         seed = await store.load();
-        seed = (await applyGrowth(store, seed, answer, 'openai', undefined, 'en')).seed;
+        seed = (await applyGrowth(store, answer, 'openai', undefined, 'en')).seed;
       }
       expect(seed.users).toEqual(['High-school students']);
       expect(seed.problem).toBe('They do not know what to study first');
@@ -373,7 +373,7 @@ describe('Seed MVP flow', () => {
     try {
       const store = new SeedStore(root); let seed = await plant(store, 'A study planner');
       for (const answer of ['Students', 'They cannot choose what to study', 'A plan for today', 'Planning only']) {
-        await askGrowthQuestion(store, seed, 'openai'); seed = await store.load(); seed = (await applyGrowth(store, seed, answer, 'openai')).seed;
+        await askGrowthQuestion(store, 'openai'); seed = await store.load(); seed = (await applyGrowth(store, answer, 'openai')).seed;
       }
       const before = seed.maturity; const bloom = dimensionsFor(seed); const recalculated = calculateMaturity({ ...seed, maturityDimensions: bloom, maturity: 0 });
       expect(recalculated).toBeGreaterThanOrEqual(before - 1);
@@ -388,8 +388,8 @@ describe('Seed MVP flow', () => {
       let seed = await plant(store, 'A focused idea');
       let previous = seed.maturity;
       for (const answer of ['Students', 'They cannot focus', 'Finish one session']) {
-        await askGrowthQuestion(store, seed, 'openai');
-        seed = (await applyGrowth(store, await store.load(), answer, 'openai')).seed;
+        await askGrowthQuestion(store, 'openai');
+        seed = (await applyGrowth(store, answer, 'openai')).seed;
         expect(seed.maturity).toBeGreaterThan(previous);
         previous = seed.maturity;
       }
@@ -400,16 +400,16 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-validation-prompts-'));
     try {
       const store = new SeedStore(root);
-      let seed = await plant(store, 'A study planner');
+      await plant(store, 'A study planner');
       for (const answer of ['Students', 'They lose focus', 'Finish a session', 'Timer only', 'Students return']) {
-        await askGrowthQuestion(store, seed, 'openai');
-        seed = (await applyGrowth(store, await store.load(), answer, 'openai')).seed;
+        await askGrowthQuestion(store, 'openai');
+        await applyGrowth(store, answer, 'openai');
       }
-      const first = await askGrowthQuestion(store, seed, 'openai');
-      seed = (await applyGrowth(store, await store.load(), 'Learn whether they finish', 'openai')).seed;
-      const second = await askGrowthQuestion(store, seed, 'openai');
-      seed = (await applyGrowth(store, await store.load(), 'Observe where they stop', 'openai')).seed;
-      const third = await askGrowthQuestion(store, seed, 'openai');
+      const first = await askGrowthQuestion(store, 'openai');
+      await applyGrowth(store, 'Learn whether they finish', 'openai');
+      const second = await askGrowthQuestion(store, 'openai');
+      await applyGrowth(store, 'Observe where they stop', 'openai');
+      const third = await askGrowthQuestion(store, 'openai');
       expect(second).not.toBe(first);
       expect(third).not.toBe(second);
     } finally { await rm(root, { recursive: true, force: true }); }
@@ -423,7 +423,7 @@ describe('Seed MVP flow', () => {
       const question = 'Who should this help first?';
       await addConversation(store, { seedId: seed.id, role: 'assistant', type: 'question', content: question });
       await store.save({ ...seed, openQuestions: [{ id: 'legacy-q', seedId: seed.id, question, importance: 'high', status: 'open', createdAt: seed.createdAt }] });
-      const result = await applyGrowth(store, await store.load(), 'Students', 'openai');
+      const result = await applyGrowth(store, 'Students', 'openai');
       expect(result.seed.users).toEqual(['Students']);
       expect(result.seed.goals).toEqual([]);
     } finally { await rm(root, { recursive: true, force: true }); }
@@ -564,7 +564,7 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-harvest-context-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A focused workflow');
-      const branch = await createBranch(store, seed, 'Repository tour', 'Help a new developer orient quickly');
+      const branch = await createBranch(store, 'Repository tour', 'Help a new developer orient quickly');
       await store.saveResearch({ id: 'research-1', seedId: seed.id, source: 'https://example.com', title: 'User interview', summary: 'Developers need a faster first step.', relevance: 'high', retrievedAt: new Date().toISOString(), isVerified: true, isEstimate: false });
       await recordDecision(store, await store.load(), 'Use a CLI-first workflow', 'Validate the smallest loop before adding surfaces');
       const file = await harvest(store, { ...(await store.load()), goals: ['Reach the first useful result'], constraints: ['One workflow only'], users: ['New developers'] }, 'prd', 'en');
@@ -582,14 +582,14 @@ describe('Seed MVP flow', () => {
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'Explore a developer workflow');
       const suggestions = await branchSuggestions(seed, 'openai'); expect(suggestions.length).toBeGreaterThanOrEqual(2); expect(suggestions.length).toBeLessThanOrEqual(4);
-      let current = await createBranch(store, seed, suggestions[0]!.name, suggestions[0]!.summary);
+      let current = await createBranch(store, suggestions[0]!.name, suggestions[0]!.summary);
       let latest = await store.load();
-      for (let index = 1; index < 5; index += 1) { const suggestion = suggestions[index % suggestions.length]!; await createBranch(store, latest, `${suggestion.name}-${index}`, suggestion.summary); latest = await store.load(); }
-      await expect(createBranch(store, latest, 'Overflow', 'Too broad')).rejects.toThrow('too-many-branches');
+      for (let index = 1; index < 5; index += 1) { const suggestion = suggestions[index % suggestions.length]!; await createBranch(store, `${suggestion.name}-${index}`, suggestion.summary); latest = await store.load(); }
+      await expect(createBranch(store, 'Overflow', 'Too broad')).rejects.toThrow('too-many-branches');
       expect((await store.branches(seed.id)).filter((branch) => branch.status === 'active')).toHaveLength(5);
-      await expect(createBranch(store, seed, 'Stale overflow', 'Should still see five active branches')).rejects.toThrow('too-many-branches');
-      const pruned = await pruneItem(store, latest, current.id); expect(pruned.activeBranch).not.toBe(current.id); expect((await store.branches(seed.id)).find((branch) => branch.id === current.id)?.status).toBe('pruned'); expect(pruned.coreIdea).toBe(latest.coreIdea);
-      const repeated = await pruneItem(store, await store.load(), current.id); expect(repeated.maturity).toBe(pruned.maturity);
+      await expect(createBranch(store, 'Stale overflow', 'Should still see five active branches')).rejects.toThrow('too-many-branches');
+      const pruned = await pruneItem(store, current.id); expect(pruned.activeBranch).not.toBe(current.id); expect((await store.branches(seed.id)).find((branch) => branch.id === current.id)?.status).toBe('pruned'); expect(pruned.coreIdea).toBe(latest.coreIdea);
+      const repeated = await pruneItem(store, current.id); expect(repeated.maturity).toBe(pruned.maturity);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
@@ -597,14 +597,12 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-branch-race-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A branch race idea');
-      let current = seed;
       for (let index = 0; index < 4; index += 1) {
-        await createBranch(store, current, `Existing ${index}`, `Existing direction ${index}`);
-        current = await store.load();
+        await createBranch(store, `Existing ${index}`, `Existing direction ${index}`);
       }
       const results = await Promise.allSettled([
-        createBranch(store, current, 'Concurrent A', 'First concurrent direction'),
-        createBranch(store, current, 'Concurrent B', 'Second concurrent direction'),
+        createBranch(store, 'Concurrent A', 'First concurrent direction'),
+        createBranch(store, 'Concurrent B', 'Second concurrent direction'),
       ]);
       expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
       expect(results.filter((result) => result.status === 'rejected' && result.reason instanceof Error && result.reason.message === 'too-many-branches')).toHaveLength(1);
@@ -616,9 +614,9 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-input-required-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A small idea');
-      await expect(createBranch(store, seed, '  ', 'A summary')).rejects.toThrow('branch-name-required');
-      await expect(createBranch(store, seed, 'A path', '  ')).rejects.toThrow('branch-summary-required');
-      await expect(pruneItem(store, seed, '   ')).rejects.toThrow('prune-item-required');
+      await expect(createBranch(store, '  ', 'A summary')).rejects.toThrow('branch-name-required');
+      await expect(createBranch(store, 'A path', '  ')).rejects.toThrow('branch-summary-required');
+      await expect(pruneItem(store, '   ')).rejects.toThrow('prune-item-required');
       expect((await store.load()).coreIdea).toBe(seed.coreIdea);
       expect(await store.branches(seed.id)).toEqual([]);
     } finally { await rm(root, { recursive: true, force: true }); }
@@ -627,31 +625,31 @@ describe('Seed MVP flow', () => {
   it('returns to the root conversation when its only active branch is pruned', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-prune-only-active-'));
     try {
-      const store = new SeedStore(root); const seed = await plant(store, 'A focused idea');
-      const branch = await createBranch(store, seed, 'Optional path', 'An optional path');
-      const pruned = await pruneItem(store, await store.load(), branch.id, 'en');
+      const store = new SeedStore(root); await plant(store, 'A focused idea');
+      const branch = await createBranch(store, 'Optional path', 'An optional path');
+      const pruned = await pruneItem(store, branch.id, 'en');
       expect(pruned.activeBranch).toBeUndefined();
-      await expect(askGrowthQuestion(store, pruned, 'openai')).resolves.toBeTruthy();
+      await expect(askGrowthQuestion(store, 'openai')).resolves.toBeTruthy();
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
   it('rejects growth against a branch that does not exist', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-missing-branch-'));
     try {
-      const store = new SeedStore(root); const seed = await plant(store, 'A small idea');
-      await expect(askGrowthQuestion(store, seed, 'openai', 'missing-branch')).rejects.toThrow('branch-selection-not-found');
-      await expect(applyGrowth(store, seed, 'An answer', 'openai', 'missing-branch')).rejects.toThrow('branch-selection-not-found');
+      const store = new SeedStore(root); await plant(store, 'A small idea');
+      await expect(askGrowthQuestion(store, 'openai', 'missing-branch')).rejects.toThrow('branch-selection-not-found');
+      await expect(applyGrowth(store, 'An answer', 'openai', 'missing-branch')).rejects.toThrow('branch-selection-not-found');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
   it('does not grow a pruned branch until it is restored', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-inactive-branch-'));
     try {
-      const store = new SeedStore(root); const seed = await plant(store, 'A small idea');
-      const branch = await createBranch(store, seed, 'Optional path', 'An optional path');
-      const pruned = await pruneItem(store, await store.load(), branch.id, 'en');
-      await expect(askGrowthQuestion(store, pruned, 'openai', branch.id)).rejects.toThrow('branch-not-active');
-      await expect(applyGrowth(store, pruned, 'An answer', 'openai', branch.id)).rejects.toThrow('branch-not-active');
+      const store = new SeedStore(root); await plant(store, 'A small idea');
+      const branch = await createBranch(store, 'Optional path', 'An optional path');
+      const pruned = await pruneItem(store, branch.id, 'en');
+      await expect(askGrowthQuestion(store, 'openai', branch.id)).rejects.toThrow('branch-not-active');
+      await expect(applyGrowth(store, 'An answer', 'openai', branch.id)).rejects.toThrow('branch-not-active');
       await expect(recordDecision(store, pruned, 'Keep the branch', 'Not yet', branch.id)).rejects.toThrow('branch-not-active');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
@@ -661,9 +659,9 @@ describe('Seed MVP flow', () => {
     try {
       const store = new SeedStore(root);
       const seed = await plant(store, 'A repository guide');
-      const branch = await createBranch(store, seed, 'Onboarding tour', 'A guided onboarding tour');
-      const question = await askGrowthQuestion(store, await store.load(), 'openai', branch.id);
-      const result = await applyGrowth(store, await store.load(), 'Show the first useful path through the repository', 'openai', branch.id);
+      const branch = await createBranch(store, 'Onboarding tour', 'A guided onboarding tour');
+      const question = await askGrowthQuestion(store, 'openai', branch.id);
+      const result = await applyGrowth(store, 'Show the first useful path through the repository', 'openai', branch.id);
       const parent = await store.load();
       const savedBranch = (await store.branches(seed.id)).find((item) => item.id === branch.id)!;
       expect(question).toBeTruthy();
@@ -682,10 +680,10 @@ describe('Seed MVP flow', () => {
     try {
       const store = new SeedStore(root);
       const seed = await plant(store, '공부 플래너');
-      const branch = await createBranch(store, seed, 'Daily ritual', 'A daily study ritual');
-      const firstQuestion = await askGrowthQuestion(store, await store.load(), 'openai', branch.id, undefined, 'ko');
-      const first = await applyGrowth(store, await store.load(), '첫 주에 매일 20분 실행', 'openai', branch.id, 'ko');
-      const secondQuestion = await askGrowthQuestion(store, first.seed, 'openai', branch.id, undefined, 'ko');
+      const branch = await createBranch(store, 'Daily ritual', 'A daily study ritual');
+      const firstQuestion = await askGrowthQuestion(store, 'openai', branch.id, undefined, 'ko');
+      await applyGrowth(store, '첫 주에 매일 20분 실행', 'openai', branch.id, 'ko');
+      const secondQuestion = await askGrowthQuestion(store, 'openai', branch.id, undefined, 'ko');
       expect(firstQuestion).toContain('Daily ritual');
       expect(secondQuestion).not.toBe(firstQuestion);
       expect(secondQuestion).not.toContain('누가');
@@ -707,11 +705,11 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-lifecycle-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A focused workflow');
-      const dormant = await wither(store, seed); expect(dormant.status).toBe('dormant'); expect(dormant.preDormantStatus).toBe('seedling');
-      const awake = await wake(store, dormant); expect(awake.status).toBe('seedling'); expect(awake.preDormantStatus).toBeUndefined();
-      const branch = await createBranch(store, awake, 'A branch', 'A branch summary');
-      const pruned = await pruneItem(store, await store.load(), branch.name.toLowerCase()); expect((await store.branches(seed.id)).find((item) => item.id === branch.id)?.status).toBe('pruned');
-      const restored = await restoreItem(store, pruned, branch.name.toUpperCase()); expect((await store.branches(seed.id)).find((item) => item.id === branch.id)?.status).toBe('active');
+      const dormant = await wither(store); expect(dormant.status).toBe('dormant'); expect(dormant.preDormantStatus).toBe('seedling');
+      const awake = await wake(store); expect(awake.status).toBe('seedling'); expect(awake.preDormantStatus).toBeUndefined();
+      const branch = await createBranch(store, 'A branch', 'A branch summary');
+      await pruneItem(store, branch.name.toLowerCase()); expect((await store.branches(seed.id)).find((item) => item.id === branch.id)?.status).toBe('pruned');
+      const restored = await restoreItem(store, branch.name.toUpperCase()); expect((await store.branches(seed.id)).find((item) => item.id === branch.id)?.status).toBe('active');
       expect(restored.prunedItems).not.toContain(branch.name.toLowerCase());
     } finally { await rm(root, { recursive: true, force: true }); }
   });
@@ -722,10 +720,10 @@ describe('Seed MVP flow', () => {
       const store = new SeedStore(root);
       const stale = await plant(store, 'A lifecycle idea');
       await store.save({ ...stale, coreIdea: 'Updated while another session was open', maturity: 42, status: 'growing' });
-      const dormant = await wither(store, stale);
+      const dormant = await wither(store);
       expect(dormant.coreIdea).toBe('Updated while another session was open');
       expect(dormant.maturity).toBe(42);
-      const awake = await wake(store, stale);
+      const awake = await wake(store);
       expect(awake.status).toBe('growing');
       expect(awake.coreIdea).toBe('Updated while another session was open');
     } finally { await rm(root, { recursive: true, force: true }); }
@@ -735,12 +733,12 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-prune-case-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A focused workflow');
-      const first = await pruneItem(store, seed, 'Team collaboration', 'en');
-      const repeated = await pruneItem(store, first, 'team COLLABORATION', 'en');
+      const first = await pruneItem(store, 'Team collaboration', 'en');
+      const repeated = await pruneItem(store, 'team COLLABORATION', 'en');
       expect(repeated.maturity).toBe(first.maturity);
       expect(repeated.coreIdea).toBe(first.coreIdea);
       expect(repeated.prunedItems).toEqual(['Team collaboration']);
-      const restored = await restoreItem(store, repeated, 'TEAM COLLABORATION');
+      const restored = await restoreItem(store, 'TEAM COLLABORATION');
       expect(restored.prunedItems).toEqual([]);
       expect(restored.constraints).toEqual([]);
       expect(restored.coreIdea).toBe(seed.coreIdea);
@@ -751,12 +749,12 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-branch-id-case-'));
     try {
       const store = new SeedStore(root); const seed = await plant(store, 'A branch id idea');
-      const branch = await createBranch(store, seed, 'Optional path', 'An optional path');
-      await pruneItem(store, await store.load(), branch.id.toUpperCase());
+      const branch = await createBranch(store, 'Optional path', 'An optional path');
+      await pruneItem(store, branch.id.toUpperCase());
       expect((await store.branches(seed.id)).find((item) => item.id === branch.id)?.status).toBe('pruned');
-      await restoreItem(store, await store.load(), branch.id.toUpperCase());
+      await restoreItem(store, branch.id.toUpperCase());
       expect((await store.branches(seed.id)).find((item) => item.id === branch.id)?.status).toBe('active');
-      const question = await askGrowthQuestion(store, await store.load(), 'openai', branch.id.toUpperCase());
+      const question = await askGrowthQuestion(store, 'openai', branch.id.toUpperCase());
       expect(question).toBeTruthy();
       const decision = await recordDecision(store, await store.load(), 'Keep this direction', 'It is focused', branch.id.toUpperCase());
       expect(decision.decision.branchId).toBe(branch.id);
@@ -767,11 +765,11 @@ describe('Seed MVP flow', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-restore-harvested-'));
     try {
       const store = new SeedStore(root);
-      const seed = await plant(store, 'A harvested idea');
-      const branch = await createBranch(store, seed, 'Optional path', 'An optional path');
-      await pruneItem(store, await store.load(), branch.id);
+      await plant(store, 'A harvested idea');
+      const branch = await createBranch(store, 'Optional path', 'An optional path');
+      await pruneItem(store, branch.id);
       await harvest(store, await store.load(), 'idea', 'en');
-      const restored = await restoreItem(store, await store.load(), branch.id);
+      const restored = await restoreItem(store, branch.id);
       expect(restored.status).toBe('harvested');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
@@ -779,9 +777,9 @@ describe('Seed MVP flow', () => {
   it('does not grow or bloom a dormant seed until it is woken', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'seed-dormant-'));
     try {
-      const store = new SeedStore(root); const seed = await plant(store, 'A dormant idea'); const dormant = await wither(store, seed);
-      await expect(applyGrowth(store, dormant, 'An answer', 'openai')).rejects.toThrow('seed-dormant');
-      await expect(createBranch(store, dormant, 'Blocked path', 'Should not mutate dormancy')).rejects.toThrow('seed-dormant');
+      const store = new SeedStore(root); await plant(store, 'A dormant idea'); const dormant = await wither(store);
+      await expect(applyGrowth(store, 'An answer', 'openai')).rejects.toThrow('seed-dormant');
+      await expect(createBranch(store, 'Blocked path', 'Should not mutate dormancy')).rejects.toThrow('seed-dormant');
       await expect(recordDecision(store, dormant, 'Blocked decision')).rejects.toThrow('seed-dormant');
       const evaluation = await evaluateMaturity(dormant, 'openai'); const stillDormant = { ...dormant, maturityDimensions: evaluation.dimensions, maturity: calculateMaturity({ ...dormant, maturityDimensions: evaluation.dimensions }), status: 'dormant' as const };
       await store.save(stillDormant); expect((await store.load()).status).toBe('dormant');

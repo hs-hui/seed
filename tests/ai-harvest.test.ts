@@ -119,10 +119,10 @@ describe('AI harvest persistence', () => {
       await addConversation(store, { seedId: state.id, role: 'user', type: 'answer', content: 'Make the question easier', metadata: { intent: 'change-question' } });
       await addConversation(store, { seedId: state.id, role: 'assistant', type: 'summary', content: 'AI_INVENTED_PAYMENTS' });
       await recordDecision(store, state, 'Use local files');
-      const branch = await createBranch(store, state, 'Payments', 'Subscriptions');
+      const branch = await createBranch(store, 'Payments', 'Subscriptions');
       await recordDecision(store, state, 'BRANCH_DECISION', '', branch.id);
       await addConversation(store, { seedId: state.id, branchId: branch.id, role: 'user', type: 'answer', content: 'BRANCH_ANSWER' });
-      await pruneItem(store, state, branch.id);
+      await pruneItem(store, branch.id);
       const evidence = buildHarvestInput(await store.load(), await store.branches(state.id), await store.conversations(state.id));
       expect(evidence.evidence.map((entry) => entry.text)).toEqual([idea, 'Save the task', 'Use local files']);
       expect(evidence.evidence[1]!.question).toBe('What should users do?');

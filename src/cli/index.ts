@@ -217,7 +217,7 @@ async function plantCommand(idea: string | undefined, options: CommonOptions): P
   // user did not pass --provider, matching what askGrowthQuestion will use.
   await getProvider(options.provider, options.model, currentLanguage());
   let seed = await plant(store, idea);
-  let question = await askGrowthQuestion(store, seed, options.provider, undefined, options.model, currentLanguage());
+  let question = await askGrowthQuestion(store, options.provider, undefined, options.model, currentLanguage());
   seed = await store.load();
   if (options.json) { print({ ...(await store.load()), firstQuestion: question }, true); } else {
     console.log(`${t('plant.created')}\n${t('plant.growNext')}`);

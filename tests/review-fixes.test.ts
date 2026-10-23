@@ -45,11 +45,11 @@ describe('code review regressions', () => {
     try {
       const store = new SeedStore(root);
       const idea = 'A'.repeat(260) + ' KEEP THIS REQUIREMENT';
-      const seed = await plant(store, idea);
-      const pruned = await pruneItem(store, seed, 'Payments');
+      await plant(store, idea);
+      const pruned = await pruneItem(store, 'Payments');
       expect(pruned.coreIdea).toBe(idea);
       expect(pruned.prunedItems).toContain('Payments');
-      expect((await restoreItem(store, pruned, 'Payments')).coreIdea).toBe(idea);
+      expect((await restoreItem(store, 'Payments')).coreIdea).toBe(idea);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
@@ -59,10 +59,10 @@ describe('code review regressions', () => {
       const store = new SeedStore(root);
       const seed = await plant(store, 'Medication reminder');
       await store.save({ ...seed, goals: ['Take medication on time'] });
-      const branch = await createBranch(store, seed, 'Discarded mobile direction', 'Mobile exploration');
+      const branch = await createBranch(store, 'Discarded mobile direction', 'Mobile exploration');
       await recordDecision(store, seed, 'Use Flutter', 'For the discarded direction', branch.id);
       await addConversation(store, { seedId: seed.id, branchId: branch.id, role: 'user', type: 'answer', content: 'DISCARDED_ANSWER' });
-      await pruneItem(store, seed, branch.id);
+      await pruneItem(store, branch.id);
       for (const lang of ['en', 'ko'] as const) {
         for (const type of ['prd', 'prompt', 'trd'] as const) {
           const file = await harvest(store, await store.load(), type, lang);
@@ -104,10 +104,10 @@ describe('code review regressions', () => {
         const store = new SeedStore(root);
         const seed = createSeed('A product'); await store.create(seed);
         if (command === 'sunlight') vi.spyOn(provider, 'sunlightAnalysis').mockImplementation(async () => {
-          await wither(store, seed); return { areas: [], assumptions: [], openQuestions: [] };
+          await wither(store); return { areas: [], assumptions: [], openQuestions: [] };
         });
         else vi.spyOn(provider, 'evaluateMaturity').mockImplementation(async () => {
-          await wither(store, seed); return { dimensions: emptyDimensions(), clear: [], uncertain: [], explore: [] };
+          await wither(store); return { dimensions: emptyDimensions(), clear: [], uncertain: [], explore: [] };
         });
         const program = new Command();
         const deps = { addCommon: (c: Command) => c, run: async (action: () => Promise<void>) => action(), targetStore: async () => store, currentSeed: async () => store.load(), print: () => {} };

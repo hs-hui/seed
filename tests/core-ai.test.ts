@@ -13,8 +13,8 @@ describe('core AI port', () => {
     const question = vi.spyOn(coreAI, 'nextQuestion').mockResolvedValue({ question: 'Who needs this?', maturityDelta: 3, focus: 'user' });
     try {
       const store = new SeedStore(root);
-      const seed = await plant(store, 'A small idea');
-      expect(await askGrowthQuestion(store, seed)).toBe('Who needs this?');
+      await plant(store, 'A small idea');
+      expect(await askGrowthQuestion(store)).toBe('Who needs this?');
       expect(question).toHaveBeenCalledOnce();
     } finally { question.mockRestore(); await rm(root, { recursive: true, force: true }); }
   });

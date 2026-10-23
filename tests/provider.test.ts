@@ -989,22 +989,21 @@ describe('AI language handling', () => {
     globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: nextResponse } }] }), { status: 200 })) as typeof fetch;
     try {
       const store = new SeedStore(projectRoot);
-      const seed = await plant(store, '개발자를 돕는 안내 도구');
-      const question = await askGrowthQuestion(store, seed, 'openai', undefined, undefined, 'ko');
-      const prompted = await store.load();
+      await plant(store, '개발자를 돕는 안내 도구');
+      const question = await askGrowthQuestion(store, 'openai', undefined, undefined, 'ko');
       expect(question).toContain('아이디어');
       const userAnswer = '처음에는 저장소를 처음 보는 개발자입니다.';
       nextResponse = JSON.stringify({ updatedSummary: `개발자를 돕는 안내 도구 — ${userAnswer}`, questionReason: '반영했습니다', contradictionsDetected: [], suggestions: [], maturityDelta: 3 });
-      const userResult = await applyGrowth(store, prompted, userAnswer, 'openai', undefined, 'ko');
+      const userResult = await applyGrowth(store, userAnswer, 'openai', undefined, 'ko');
       expect(userResult.seed.users).toContain(userAnswer);
       expect(userResult.seed.problem).toBe('');
       nextResponse = JSON.stringify({ question: '“처음에는 저장소를 처음 보는 개발자입니다”인 사람이 가장 답답하거나 막히는 순간은 언제예요?', maturityDelta: 3, focus: 'problem' });
-      const problemQuestion = await askGrowthQuestion(store, userResult.seed, 'openai', undefined, undefined, 'ko');
+      const problemQuestion = await askGrowthQuestion(store, 'openai', undefined, undefined, 'ko');
       expect(problemQuestion).toContain('답답');
       expect(problemQuestion).toContain('처음에는');
       const problemAnswer = '저장소 구조를 처음 파악할 때 가장 힘들어합니다.';
       nextResponse = JSON.stringify({ updatedSummary: `개발자를 돕는 안내 도구 — ${problemAnswer}`, questionReason: '반영했습니다', contradictionsDetected: [], suggestions: [], maturityDelta: 3 });
-      const result = await applyGrowth(store, await store.load(), problemAnswer, 'openai', undefined, 'ko');
+      const result = await applyGrowth(store, problemAnswer, 'openai', undefined, 'ko');
       expect(result.seed.problem).toBe(problemAnswer);
     } finally {
       globalThis.fetch = originalFetch;

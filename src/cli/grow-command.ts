@@ -28,17 +28,17 @@ export function registerGrowCommand(program: Command, deps: {
       // If the previous turn already closed its question, create the next one
       // first so the answer is classified against the right growth focus.
       if (!seed.openQuestions.some((question) => question.status === 'open' && question.branchId === branchId)) {
-        await askGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage());
+        await askGrowthQuestion(store, options.provider, branchId, options.model, currentLanguage());
         seed = await store.load();
       }
       if (isQuestionChangeRequest(answer)) {
-        const question = await changeGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage(), answer);
+        const question = await changeGrowthQuestion(store, options.provider, branchId, options.model, currentLanguage(), answer);
         if (options.json) print({ changedQuestion: true, question, maturity: (await store.load()).maturity }, true);
         else { console.log(`${t('grow.changeQuestion')}\n`); printGrowthQuestion(question, false); }
         return;
       }
       if (isGrowthPauseRequest(answer)) {
-        const question = await askGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage());
+        const question = await askGrowthQuestion(store, options.provider, branchId, options.model, currentLanguage());
         if (options.json) print({ paused: true, question, maturity: (await store.load()).maturity }, true);
         else console.log(t('grow.pause'));
         return;
@@ -46,18 +46,18 @@ export function registerGrowCommand(program: Command, deps: {
       const pendingQuestion = seed.openQuestions.find((entry) => entry.status === 'open' && entry.branchId === branchId)?.question ?? '';
       const aiIntent = await classifyGrowthInput(answer, pendingQuestion, options.provider, options.model, currentLanguage());
       if (aiIntent === 'pause') {
-        const question = await askGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage());
+        const question = await askGrowthQuestion(store, options.provider, branchId, options.model, currentLanguage());
         if (options.json) print({ paused: true, question, maturity: (await store.load()).maturity }, true);
         else console.log(t('grow.pause'));
         return;
       }
       if (aiIntent === 'change-question') {
-        const question = await changeGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage(), answer);
+        const question = await changeGrowthQuestion(store, options.provider, branchId, options.model, currentLanguage(), answer);
         if (options.json) print({ changedQuestion: true, question, maturity: (await store.load()).maturity }, true);
         else { console.log(`${t('grow.changeQuestion')}\n`); printGrowthQuestion(question, false); }
         return;
       }
-      const result = await applyGrowth(store, seed, answer, options.provider, branchId, currentLanguage(), options.model);
+      const result = await applyGrowth(store, answer, options.provider, branchId, currentLanguage(), options.model);
       seed = result.seed;
       if (options.json) print({ before: result.before, after: result.after, maturity: seed.maturity, status: seed.status, update: result.update }, true);
       else { console.log(`${t('grow.update')}\n${t('grow.before')}: "${result.before}"\n${t('grow.now')}:    "${result.after}"\n\n${t('grow.saved', { maturity: seed.maturity })}`); printGrowthSignals(result.update); if (result.after.length > 180) console.log(`\n${t('grow.pruneHint')}`); }
@@ -65,7 +65,7 @@ export function registerGrowCommand(program: Command, deps: {
     }
     const interactive = options.interactive !== false && process.stdin.isTTY && !options.json && options.input !== false;
     if (!interactive) {
-      const question = await askGrowthQuestion(store, seed, options.provider, branchId, options.model, currentLanguage());
+      const question = await askGrowthQuestion(store, options.provider, branchId, options.model, currentLanguage());
       print({ question }, Boolean(options.json));
       return;
     }
