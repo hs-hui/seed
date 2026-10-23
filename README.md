@@ -21,7 +21,7 @@ When you're ready, Seed turns the conversation into real documents: a product pl
 - **Nothing is lost.** Every answer, every direction you tried, and every decision you made is saved locally and can be revisited.
 - **You can always undo.** Trimmed-away ideas aren't deleted — they can be restored any time.
 - **Honest feedback.** Seed points out contradictions and gaps instead of just cheering you on.
-- **Your choice of AI.** Connect OpenAI, Gemini, Claude, or any OpenAI-compatible provider — Seed never sends your idea anywhere without a provider you configured.
+- **Your choice of AI.** Connect OpenAI, Gemini, Claude, or any OpenAI-compatible provider — Seed never sends your idea anywhere without a provider you configured, except the optional `--web` search in `seed sunlight` (see below).
 
 ## Install
 
@@ -148,7 +148,7 @@ You can also set your language permanently with `seed config set lang ko`. Whate
 
 ## Where does my data go?
 
-Everything Seed knows about your idea lives in a `.seed/` folder inside your project — plain JSON and Markdown files, nothing hidden or sent anywhere unless you've connected an AI provider. Seed also adds `.seed/` to your project's `.gitignore` when you plant an idea (creating the file if it doesn't exist), and `seed evolve` creates a new child folder inside your project folder. Seed never edits your source code or other project files. The `--web` option of `seed sunlight` sends the idea summary to a public search engine, and it is off by default.
+Everything Seed knows about your idea lives in a `.seed/` folder inside your project — plain JSON and Markdown files, nothing hidden or sent anywhere unless you've connected an AI provider or use the optional `--web` search. Seed also adds `.seed/` to your project's `.gitignore` when you plant an idea (creating the file if it doesn't exist), and `seed evolve` creates a new child folder inside your project folder. Seed never edits your source code or other project files. The `--web` option of `seed sunlight` sends the idea summary to a public search engine, and it is off by default.
 
 ## Command reference
 
